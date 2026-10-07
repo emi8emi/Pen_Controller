@@ -1,0 +1,8 @@
+[package]
+name = "pen-proto"
+version = "0.1.0"
+edition = "2021"
+
+# No dependencies on purpose: this crate is the contract between the controller and its clients,
+# so it stays small, portable and easy to mirror in other languages (C#, JS...).
+[dependencies]

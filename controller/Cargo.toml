@@ -1,0 +1,25 @@
+[package]
+name = "controller"
+version = "0.1.0"
+edition = "2021"
+
+# Versions are pinned on purpose: wgpu and windows change their APIs between releases.
+# Written against wgpu 30 and windows 0.58 (the wgpu parts have been compiled by the author, not by me).
+[dependencies]
+pen-proto = { path = "../pen-proto" }
+pen-core = { path = "../pen-core" }
+winit = "0.30"
+wgpu = "30"
+pollster = "0.4"
+global-hotkey = "0.8"
+tray-icon = "0.26"
+bytemuck = { version = "1", features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Input_Pointer",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
