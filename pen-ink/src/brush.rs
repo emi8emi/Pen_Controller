@@ -1,25 +1,77 @@
 //! The brush engine: pen samples in, dabs out. Circle brush only for now (the Tauri overlay's brush
 //! engine has airbrush and rectangle brushes to port later).
 //!
+//! `BrushConfig::default()` reproduces the original fixed brush (radius 1 + 7 * pressure, pink), so the
+//! controller keeps working unchanged. The sketch studio passes its own config.
+//!
 //! No GPU and no window in here, so it is unit-tested on any machine.
 
-use crate::renderer::Dab;
+use crate::renderer::{Dab, DEFAULT_COLOR, DEFAULT_HARDNESS};
 use pen_proto::{Phase, Sample};
 
-fn radius_for(p: f32) -> f32 {
-    1.0 + 7.0 * p
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BrushConfig {
+    /// Diameter in pixels at full pressure.
+    pub size: f32,
+    /// With `size_from_pressure`: size at zero pressure, as a fraction of `size`.
+    pub min_scale: f32,
+    pub size_from_pressure: bool,
+    /// Per-dab opacity, 0..1 (overlapping dabs build up).
+    pub opacity: f32,
+    pub opacity_from_pressure: bool,
+    /// 0 = soft edge, 1 = hard edge.
+    pub hardness: f32,
+    /// Distance between dabs as a fraction of the dab RADIUS.
+    pub spacing: f32,
+    /// Straight RGB, 0..1.
+    pub color: [f32; 3],
 }
-fn dab(x: f32, y: f32, p: f32) -> Dab {
-    Dab { x, y, radius: radius_for(p), alpha: 1.0 }
+
+impl Default for BrushConfig {
+    fn default() -> Self {
+        // radius = 8 * (0.125 + 0.875 p) = 1 + 7 p, the original brush
+        BrushConfig {
+            size: 16.0,
+            min_scale: 0.125,
+            size_from_pressure: true,
+            opacity: 1.0,
+            opacity_from_pressure: false,
+            hardness: DEFAULT_HARDNESS,
+            spacing: 0.15,
+            color: DEFAULT_COLOR,
+        }
+    }
+}
+
+impl BrushConfig {
+    pub fn radius(&self, pressure: f32) -> f32 {
+        let p = pressure.clamp(0.0, 1.0);
+        let scale = if self.size_from_pressure { self.min_scale + (1.0 - self.min_scale) * p } else { 1.0 };
+        (self.size * 0.5 * scale).max(0.5)
+    }
+}
+
+fn dab(cfg: &BrushConfig, x: f32, y: f32, p: f32) -> Dab {
+    let alpha = cfg.opacity.clamp(0.0, 1.0) * if cfg.opacity_from_pressure { p.clamp(0.0, 1.0) } else { 1.0 };
+    Dab { x, y, radius: cfg.radius(p), alpha, color: cfg.color, hardness: cfg.hardness }
 }
 
 #[derive(Default)]
 pub struct Stroker {
+    cfg: BrushConfig,
     last: Option<(f32, f32, f32)>,
     acc: f32,
 }
 
 impl Stroker {
+    pub fn new(cfg: BrushConfig) -> Self {
+        Stroker { cfg, last: None, acc: 0.0 }
+    }
+
+    pub fn config(&self) -> &BrushConfig {
+        &self.cfg
+    }
+
     /// Feed one sample; the dabs it produces are appended to `out`.
     pub fn feed(&mut self, s: Sample, out: &mut Vec<Dab>) {
         let pressure = s.pressure.unwrap_or(1.0); // a pen without pressure draws at full size
@@ -27,7 +79,7 @@ impl Stroker {
             Phase::Hover | Phase::Up => self.last = None,
             Phase::Down | Phase::Move => match self.last {
                 None => {
-                    out.push(dab(s.x, s.y, pressure));
+                    out.push(dab(&self.cfg, s.x, s.y, pressure));
                     self.acc = 0.0;
                     self.last = Some((s.x, s.y, pressure));
                 }
@@ -37,11 +89,11 @@ impl Stroker {
                     if l < 0.5 {
                         return;
                     }
-                    let sp = (radius_for(pressure) * 0.15).max(0.7);
+                    let sp = (self.cfg.radius(pressure) * self.cfg.spacing).max(0.7);
                     let mut need = sp - self.acc;
                     while need <= l {
                         let t = need / l;
-                        out.push(dab(lx + dx * t, ly + dy * t, lp + (pressure - lp) * t));
+                        out.push(dab(&self.cfg, lx + dx * t, ly + dy * t, lp + (pressure - lp) * t));
                         need += sp;
                     }
                     self.acc = l - (need - sp);
@@ -55,6 +107,10 @@ impl Stroker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn radius_for(p: f32) -> f32 {
+        BrushConfig::default().radius(p)
+    }
 
     fn sample(phase: Phase, x: f32, y: f32, pressure: Option<f32>) -> Sample {
         Sample {
@@ -72,13 +128,24 @@ mod tests {
         }
     }
 
-    fn run(samples: &[Sample]) -> Vec<Dab> {
-        let mut s = Stroker::default();
+    fn run_with(cfg: BrushConfig, samples: &[Sample]) -> Vec<Dab> {
+        let mut s = Stroker::new(cfg);
         let mut out = Vec::new();
         for x in samples {
             s.feed(*x, &mut out);
         }
         out
+    }
+
+    fn run(samples: &[Sample]) -> Vec<Dab> {
+        run_with(BrushConfig::default(), samples)
+    }
+
+    #[test]
+    fn the_default_brush_is_the_original_one() {
+        for p in [0.0, 0.25, 0.5, 1.0] {
+            assert!((radius_for(p) - (1.0 + 7.0 * p)).abs() < 1e-5);
+        }
     }
 
     #[test]
@@ -143,5 +210,31 @@ mod tests {
             sample(Phase::Up, 500.0, 0.0, Some(0.0)),
         ]);
         assert_eq!(dabs.len(), 2, "no dabs between the two taps");
+    }
+
+    #[test]
+    fn the_config_sets_colour_opacity_and_hardness_on_every_dab() {
+        let cfg = BrushConfig { color: [0.1, 0.2, 0.3], opacity: 0.4, hardness: 0.9, ..BrushConfig::default() };
+        let dabs = run_with(cfg, &[sample(Phase::Down, 0.0, 0.0, Some(1.0)), sample(Phase::Move, 30.0, 0.0, Some(1.0))]);
+        assert!(dabs.len() > 1);
+        for d in &dabs {
+            assert_eq!(d.color, [0.1, 0.2, 0.3]);
+            assert_eq!(d.alpha, 0.4);
+            assert_eq!(d.hardness, 0.9);
+        }
+    }
+
+    #[test]
+    fn a_brush_without_size_from_pressure_ignores_pressure() {
+        let cfg = BrushConfig { size: 10.0, size_from_pressure: false, ..BrushConfig::default() };
+        let dabs = run_with(cfg, &[sample(Phase::Down, 0.0, 0.0, Some(0.1)), sample(Phase::Move, 40.0, 0.0, Some(1.0))]);
+        assert!(dabs.iter().all(|d| d.radius == 5.0));
+    }
+
+    #[test]
+    fn opacity_from_pressure_scales_the_alpha() {
+        let cfg = BrushConfig { opacity: 0.8, opacity_from_pressure: true, ..BrushConfig::default() };
+        let dabs = run_with(cfg, &[sample(Phase::Down, 0.0, 0.0, Some(0.5))]);
+        assert!((dabs[0].alpha - 0.4).abs() < 1e-6);
     }
 }

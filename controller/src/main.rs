@@ -38,6 +38,7 @@ use std::time::Instant;
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use pen_core::{Action, Lifecycle};
+use pen_ink::{Border, InkRenderer, RendererOptions, Stroker, WgpuRenderer};
 use pen_proto::{CanvasOptions, Phase, Sample};
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
@@ -46,8 +47,6 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::window::{Window, WindowId, WindowLevel};
-
-use pen_ink::{Border, InkRenderer, RendererOptions, Stroker, WgpuRenderer};
 
 /// Leave a strip this many pixels tall at the top of the screen uncovered, so browsers and video players
 /// behind the overlay do not think they are hidden and stop painting.
@@ -399,7 +398,16 @@ impl ApplicationHandler<UserEvent> for App {
         #[cfg(windows)]
         input_win::install(&window);
 
-        let size = window.inner_size(); let mut renderer = WgpuRenderer::new( window.clone(), (size.width, size.height), RendererOptions { border: Some(Border { width_px: 3.0, rgb: [1.0, 0.282, 0.690], alpha: 0.55 }), }, );
+        let size = window.inner_size();
+        let mut renderer = WgpuRenderer::new(
+            window.clone(),
+            (size.width, size.height),
+            RendererOptions {
+                // 3 px, the shared pink at 55%: the border the overlay shows so you can tell it is up
+                border: Some(Border { width_px: 3.0, rgb: [1.0, 0.282, 0.690], alpha: 0.55 }),
+                ..Default::default()
+            },
+        );
         renderer.present(); // first frame: fully transparent
         self.renderer = Some(Box::new(renderer));
         self.window = Some(window);

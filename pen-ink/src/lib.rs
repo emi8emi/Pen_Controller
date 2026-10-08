@@ -8,5 +8,5 @@
 pub mod brush;
 pub mod renderer;
 
-pub use brush::Stroker;
-pub use renderer::{Border, Dab, InkRenderer, RendererOptions, WgpuRenderer};
+pub use brush::{BrushConfig, Stroker};
+pub use renderer::{Border, Dab, InkRenderer, RendererOptions, WgpuRenderer, DEFAULT_COLOR, DEFAULT_HARDNESS};

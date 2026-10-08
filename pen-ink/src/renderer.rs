@@ -9,6 +9,19 @@
 //! (an `Arc<winit::window::Window>` works) plus its size in pixels.
 
 const MAX_DABS: usize = 16384;
+/// dst = dst * (1 - src.a): the dab's alpha removes ink, its colour is ignored.
+const ERASE_BLEND: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::Zero,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+    alpha: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::Zero,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+};
 const INK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 /// One stamp of the brush: what the brush engine hands to a renderer. Positions are surface pixels.
@@ -19,7 +32,15 @@ pub struct Dab {
     pub y: f32,
     pub radius: f32,
     pub alpha: f32,
+    /// Straight (not premultiplied) colour, 0..1.
+    pub color: [f32; 3],
+    /// 0 = soft edge all the way in, 1 = hard edge. Kept below 1 in the shader.
+    pub hardness: f32,
 }
+
+/// The shared pink, and the edge softness the renderer had before dabs carried their own.
+pub const DEFAULT_COLOR: [f32; 3] = [1.0, 0.282, 0.690];
+pub const DEFAULT_HARDNESS: f32 = 0.75;
 
 /// What the app needs from a renderer.
 pub trait InkRenderer {
@@ -29,6 +50,10 @@ pub trait InkRenderer {
     fn clear(&mut self);
     /// Stamp dabs onto the ink.
     fn draw_dabs(&mut self, dabs: &[Dab]);
+    /// Remove ink under the dabs (eraser). Colour is ignored; alpha is how strongly it erases.
+    fn erase_dabs(&mut self, _dabs: &[Dab]) {}
+    /// Change the border / paper while running.
+    fn set_options(&mut self, _options: RendererOptions) {}
     /// Show the current ink (and the border, if any) on screen. False if no frame could be presented.
     fn present(&mut self) -> bool;
 }
@@ -47,16 +72,20 @@ pub struct Border {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct RendererOptions {
     pub border: Option<Border>,
+    /// Opaque paper colour (straight RGB, 0..1) drawn under the ink. None = see-through.
+    pub paper: Option<[f32; 3]>,
 }
 
 const STAMP_WGSL: &str = r#"
-struct Params { screen: vec2<f32>, opaque: f32, border_width: f32, border: vec4<f32> };
+struct Params { screen: vec2<f32>, opaque: f32, border_width: f32, border: vec4<f32>, paper: vec4<f32> };
 @group(0) @binding(0) var<uniform> params: Params;
 
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) alpha: f32,
+    @location(2) color: vec3<f32>,
+    @location(3) hardness: f32,
 };
 
 @vertex
@@ -65,6 +94,8 @@ fn vs_stamp(
     @location(0) center: vec2<f32>,
     @location(1) radius: f32,
     @location(2) alpha: f32,
+    @location(3) color: vec3<f32>,
+    @location(4) hardness: f32,
 ) -> VsOut {
     var corners = array<vec2<f32>, 4>(
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, 1.0)
@@ -76,20 +107,21 @@ fn vs_stamp(
     o.pos = vec4<f32>(px.x / params.screen.x * 2.0 - 1.0, 1.0 - px.y / params.screen.y * 2.0, 0.0, 1.0);
     o.uv = c * half / radius; // length 1.0 at the circle edge
     o.alpha = alpha;
+    o.color = color;
+    o.hardness = hardness;
     return o;
 }
 
 @fragment
 fn fs_stamp(i: VsOut) -> @location(0) vec4<f32> {
     let d = length(i.uv);
-    let a = (1.0 - smoothstep(0.75, 1.0, d)) * i.alpha;
-    let col = vec3<f32>(1.0, 0.282, 0.690); // the shared pink
-    return vec4<f32>(col * a, a); // premultiplied
+    let a = (1.0 - smoothstep(min(i.hardness, 0.99), 1.0, d)) * i.alpha;
+    return vec4<f32>(i.color * a, a); // premultiplied
 }
 "#;
 
 const PRESENT_WGSL: &str = r#"
-struct Params { screen: vec2<f32>, opaque: f32, border_width: f32, border: vec4<f32> };
+struct Params { screen: vec2<f32>, opaque: f32, border_width: f32, border: vec4<f32>, paper: vec4<f32> };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var ink: texture_2d<f32>;
 
@@ -102,6 +134,8 @@ fn vs_full(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
 @fragment
 fn fs_full(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
     var c = textureLoad(ink, vec2<i32>(frag.xy), 0);
+    // Paper under the ink (premultiplied, alpha 1 when set, all zero when not).
+    c = c + params.paper * (1.0 - c.a);
     // Optional border, drawn over the ink. `params.border` is premultiplied; "over" blend.
     // border_width is 0 when there is none, so the test below never passes.
     let edge = min(min(frag.x, frag.y), min(params.screen.x - frag.x, params.screen.y - frag.y));
@@ -117,7 +151,8 @@ fn fs_full(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
 }
 "#;
 
-const DAB_ATTRS: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32, 2 => Float32];
+const DAB_ATTRS: [wgpu::VertexAttribute; 5] =
+    wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32, 2 => Float32, 3 => Float32x3, 4 => Float32];
 
 pub struct WgpuRenderer {
     surface: wgpu::Surface<'static>,
@@ -126,9 +161,11 @@ pub struct WgpuRenderer {
     config: wgpu::SurfaceConfiguration,
     opaque: bool,
     border: Option<Border>,
+    paper: Option<[f32; 3]>,
     params: wgpu::Buffer,
     instances: wgpu::Buffer,
     stamp_pipe: wgpu::RenderPipeline,
+    erase_pipe: wgpu::RenderPipeline,
     stamp_bg: wgpu::BindGroup,
     present_pipe: wgpu::RenderPipeline,
     present_bgl: wgpu::BindGroupLayout,
@@ -213,7 +250,7 @@ impl WgpuRenderer {
 
         let params = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("params"),
-            size: 32,
+            size: 48,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -252,35 +289,40 @@ impl WgpuRenderer {
             bind_group_layouts: &[Some(&stamp_bgl)],
             immediate_size: 0,
         });
-        let stamp_pipe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("stamp"),
-            layout: Some(&stamp_layout),
-            vertex: wgpu::VertexState {
-                module: &stamp_mod,
-                entry_point: Some("vs_stamp"),
-                compilation_options: Default::default(),
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<Dab>() as u64,
-                    step_mode: wgpu::VertexStepMode::Instance,
-                    attributes: &DAB_ATTRS,
-                })],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &stamp_mod,
-                entry_point: Some("fs_stamp"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: INK_FORMAT,
-                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
+        // One pipeline to stamp ink and one with a different blend to erase it.
+        let make_stamp = |label: &'static str, blend: wgpu::BlendState| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&stamp_layout),
+                vertex: wgpu::VertexState {
+                    module: &stamp_mod,
+                    entry_point: Some("vs_stamp"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<Dab>() as u64,
+                        step_mode: wgpu::VertexStepMode::Instance,
+                        attributes: &DAB_ATTRS,
+                    })],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &stamp_mod,
+                    entry_point: Some("fs_stamp"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: INK_FORMAT,
+                        blend: Some(blend),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let stamp_pipe = make_stamp("stamp", wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING);
+        let erase_pipe = make_stamp("erase", ERASE_BLEND);
 
         // present pipeline: ink texture -> surface
         let present_mod = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -340,16 +382,18 @@ impl WgpuRenderer {
         });
 
         let (ink_view, present_bg) = Self::make_ink(&device, &present_bgl, &params, config.width, config.height);
-        let mut g = WgpuRenderer {
+        let g = WgpuRenderer {
             surface,
             device,
             queue,
             config,
             opaque,
             border: options.border,
+            paper: options.paper,
             params,
             instances,
             stamp_pipe,
+            erase_pipe,
             stamp_bg,
             present_pipe,
             present_bgl,
@@ -390,11 +434,15 @@ impl WgpuRenderer {
         (view, bg)
     }
 
-    /// Layout matches `Params` in the shaders: screen (2), opaque, border width, border colour (premultiplied).
+    /// Layout matches `Params` in the shaders: screen (2), opaque, border width, border colour and paper colour (both premultiplied).
     fn write_params(&self) {
         let (bw, b) = match self.border {
             Some(b) => (b.width_px, [b.rgb[0] * b.alpha, b.rgb[1] * b.alpha, b.rgb[2] * b.alpha, b.alpha]),
             None => (0.0, [0.0; 4]),
+        };
+        let pp = match self.paper {
+            Some(c) => [c[0], c[1], c[2], 1.0],
+            None => [0.0; 4],
         };
         let p = [
             self.config.width as f32,
@@ -405,6 +453,10 @@ impl WgpuRenderer {
             b[1],
             b[2],
             b[3],
+            pp[0],
+            pp[1],
+            pp[2],
+            pp[3],
         ];
         self.queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
     }
@@ -444,7 +496,7 @@ impl WgpuRenderer {
         self.queue.submit([enc.finish()]);
     }
 
-    fn draw_dabs_impl(&self, dabs: &[Dab]) {
+    fn stamp_impl(&self, dabs: &[Dab], pipe: &wgpu::RenderPipeline) {
         for chunk in dabs.chunks(MAX_DABS) {
             // one submit per chunk: write_buffer to the same offset twice before a submit would overwrite
             self.queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(chunk));
@@ -463,7 +515,7 @@ impl WgpuRenderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(&self.stamp_pipe);
+                pass.set_pipeline(pipe);
                 pass.set_bind_group(0, &self.stamp_bg, &[]);
                 pass.set_vertex_buffer(0, self.instances.slice(..));
                 pass.draw(0..4, 0..chunk.len() as u32);
@@ -523,7 +575,15 @@ impl InkRenderer for WgpuRenderer {
         self.clear_ink()
     }
     fn draw_dabs(&mut self, dabs: &[Dab]) {
-        self.draw_dabs_impl(dabs)
+        self.stamp_impl(dabs, &self.stamp_pipe)
+    }
+    fn erase_dabs(&mut self, dabs: &[Dab]) {
+        self.stamp_impl(dabs, &self.erase_pipe)
+    }
+    fn set_options(&mut self, options: RendererOptions) {
+        self.border = options.border;
+        self.paper = options.paper;
+        self.write_params();
     }
     fn present(&mut self) -> bool {
         self.present_impl()
