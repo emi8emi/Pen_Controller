@@ -1,0 +1,14 @@
+[package]
+name = "pen-ink"
+version = "0.1.0"
+edition = "2021"
+
+# The ink: a brush engine (samples -> dabs) and a wgpu renderer (dabs -> ink texture -> surface).
+# Shared by the controller's Canvas mode and the sketch studio. No windowing crate in here: the
+# renderer takes anything wgpu accepts as a surface target (an Arc<winit::Window>, for one).
+# Versions are pinned like in the controller: wgpu changes its API between releases.
+[dependencies]
+pen-proto = { path = "../pen-proto" }
+wgpu = "30"
+pollster = "0.4"
+bytemuck = { version = "1", features = ["derive"] }

@@ -338,13 +338,11 @@ dependencies = [
 name = "controller"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "global-hotkey",
  "pen-core",
+ "pen-ink",
  "pen-proto",
- "pollster",
  "tray-icon",
- "wgpu",
  "windows 0.58.0",
  "winit",
 ]
@@ -1767,6 +1765,16 @@ name = "pen-core"
 version = "0.1.0"
 dependencies = [
  "windows 0.58.0",
+]
+
+[[package]]
+name = "pen-ink"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "pen-proto",
+ "pollster",
+ "wgpu",
 ]
 
 [[package]]

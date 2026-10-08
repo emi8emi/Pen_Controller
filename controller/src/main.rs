@@ -4,10 +4,11 @@
 //! Layout:
 //!   pen-proto   the wire protocol (messages, framing). Not used on a transport yet; samples already use its type.
 //!   pen-core    the show/hide rules (`Lifecycle`) and Windows pen/mouse detection (`pen_win`)
-//!   controller  this crate:
-//!     main.rs       app, event loop, hotkeys: wires the pieces together
+//!   pen-ink
 //!     renderer.rs   `InkRenderer` trait + the wgpu implementation
 //!     brush.rs      pen samples -> dabs
+//!   controller  this crate:
+//!     main.rs       app, event loop, hotkeys: wires the pieces together
 //!     input_win.rs  WM_POINTER input and window styling (Windows only)
 //!
 //! Lifecycle (decided in `pen_core::Lifecycle`, executed here): the window starts hidden. The pen shows it
@@ -30,10 +31,8 @@
 //!       PEN_REDIRECT = set it to keep the window's redirection bitmap (to compare)
 //!       PEN_CLEAR_ON_DISMISS = set it to start with "clear drawing when hidden" on (not saved otherwise)
 
-mod brush;
 #[cfg(windows)]
 mod input_win;
-mod renderer;
 
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
@@ -50,8 +49,7 @@ use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::window::{Window, WindowId, WindowLevel};
 
-use brush::Stroker;
-use renderer::{InkRenderer, WgpuRenderer};
+use pen_ink::{Border, InkRenderer, RendererOptions, Stroker, WgpuRenderer};
 
 /// Leave a strip this many pixels tall at the top of the screen uncovered, so browsers and video players
 /// behind the overlay do not think they are hidden and stop painting.
@@ -403,7 +401,7 @@ impl ApplicationHandler<UserEvent> for App {
         #[cfg(windows)]
         input_win::install(&window);
 
-        let mut renderer = WgpuRenderer::new(window.clone());
+        let size = window.inner_size(); let mut renderer = WgpuRenderer::new( window.clone(), (size.width, size.height), RendererOptions { border: Some(Border { width_px: 3.0, rgb: [1.0, 0.282, 0.690], alpha: 0.55 }), }, );
         renderer.present(); // first frame: fully transparent
         self.renderer = Some(Box::new(renderer));
         self.window = Some(window);
