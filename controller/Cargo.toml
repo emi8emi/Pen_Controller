@@ -3,8 +3,9 @@ name = "controller"
 version = "0.1.0"
 edition = "2021"
 
-# Versions are pinned on purpose: winit and windows change their APIs between releases.
-# The ink (brush engine + wgpu renderer) lives in pen-ink now.
+# Versions are pinned on purpose: winit changes its API between releases.
+# The ink (brush engine + wgpu renderer) lives in pen-ink; pen input and window styles in pen-core.
+# No direct `windows` dependency any more: input_win.rs only needs winit and pen-core.
 [dependencies]
 pen-proto = { path = "../pen-proto" }
 pen-core = { path = "../pen-core" }
@@ -12,12 +13,3 @@ pen-ink = { path = "../pen-ink" }
 winit = "0.30"
 global-hotkey = "0.8"
 tray-icon = "0.26"
-
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_UI_Input_Pointer",
-    "Win32_UI_Shell",
-    "Win32_UI_WindowsAndMessaging",
-] }

@@ -3,10 +3,13 @@ name = "pen-core"
 version = "0.1.0"
 edition = "2021"
 
-# Shared by the controller (and, later, the existing Tauri overlay). No UI toolkit in here:
+# Shared by the controller, the sketch studio and (later) the existing Tauri overlay. No UI toolkit in here:
 #   lifecycle  - the show/hide rules as a pure state machine (testable on any OS)
 #   pen_win    - Windows pen presence and real-mouse detection (Raw Input + a low-level mouse hook)
+#   pointer    - Windows pen samples from WM_POINTER, delivered to a callback (per window)
+#   overlay    - Windows overlay window styles: non-activating, no Alt+Tab, show/hide without activating
 [dependencies]
+pen-proto = { path = "../pen-proto" }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
@@ -15,5 +18,7 @@ windows = { version = "0.58", features = [
     "Win32_System_LibraryLoader",
     "Win32_System_Threading",
     "Win32_UI_Input",
+    "Win32_UI_Input_Pointer",
+    "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }

@@ -9,11 +9,11 @@ dismisses, drawing pressure-sensitive ink with wgpu. Meant to become a dependenc
 | Crate | What it is | Tested here |
 |---|---|---|
 | `pen-proto` | Wire protocol: samples, presence, mode/canvas/brush messages, framing, a streaming decoder. No dependencies. | 12 unit tests |
-| `pen-core` | `Lifecycle`: the show/hide rules as a pure state machine. `pen_win` (Windows only): raw-input pen presence, real-mouse detection, per-tablet `DeviceProfile`. | 11 unit tests (lifecycle) |
-| `pen-ink` | The ink, shared with the sketch studio: `brush.rs` turns samples into dabs, `renderer.rs` has the `InkRenderer` trait and the wgpu renderer (no windowing crate; the controller's border is a `RendererOptions` setting). | 7 unit tests (brush) |
-| `controller` | The app. `main.rs` wires things together, `input_win.rs` does `WM_POINTER` input and window styling. | none |
+| `pen-core` | `Lifecycle`: the show/hide rules as a pure state machine. `pen_win` (Windows only): raw-input pen presence, real-mouse detection, per-tablet `DeviceProfile`. `pointer` (Windows only): pen samples from `WM_POINTER` to a callback, state per window. `overlay` (Windows only): non-activating overlay window styles, show/hide. | 13 unit tests (11 lifecycle, 2 pointer) |
+| `pen-ink` | The ink, shared with the sketch studio: `brush.rs` turns samples into dabs (configurable through `BrushConfig`; the default is the original brush), `renderer.rs` has the `InkRenderer` trait and the wgpu renderer (no windowing crate; the controller's border is a `RendererOptions` setting). | 11 unit tests (brush) |
+| `controller` | The app. `main.rs` wires things together, `input_win.rs` is thin glue from the winit window to `pen-core`'s `pointer` and `overlay`. | none |
 
-The Windows and wgpu code (`pen_win`, `input_win`, the wgpu renderer, `main`) is not covered by the tests: it
+The Windows and wgpu code (`pen_win`, `overlay`, the `WM_POINTER` handling in `pointer`, `input_win`, the wgpu renderer, `main`) is not covered by the tests: it
 needs a window, a GPU and a pen.
 
 ## Run (Windows)
