@@ -4,9 +4,7 @@
 //! Layout:
 //!   pen-proto   the wire protocol (messages, framing). Not used on a transport yet; samples already use its type.
 //!   pen-core    the show/hide rules (`Lifecycle`) and Windows pen/mouse detection (`pen_win`)
-//!   pen-ink
-//!     renderer.rs   `InkRenderer` trait + the wgpu implementation
-//!     brush.rs      pen samples -> dabs
+//!   pen-ink     the ink: `brush.rs` (pen samples -> dabs) and `renderer.rs` (`InkRenderer` trait + the wgpu implementation)
 //!   controller  this crate:
 //!     main.rs       app, event loop, hotkeys: wires the pieces together
 //!     input_win.rs  WM_POINTER input and window styling (Windows only)
