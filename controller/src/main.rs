@@ -23,11 +23,11 @@
 //! The window never takes keyboard focus yet (`Lifecycle::can_take_focus` is ready for when it should).
 //! The mouse also draws (pressure 0.5): pin the overlay first, or moving the mouse hides it.
 //!
-//! Env:  PEN_BACKEND = dx12 (default on Windows) | vulkan
-//!       PEN_DX12 = visual (default, DirectComposition, needed for transparency) | hwnd
-//!       PEN_PRESENT = (default: mailbox if available) | vsync | fifo | mailbox | immediate
-//!       PEN_REDIRECT = set it to keep the window's redirection bitmap (to compare)
+//! Env:  PEN_REDIRECT = set it to keep the window's redirection bitmap (to compare)
 //!       PEN_CLEAR_ON_DISMISS = set it to start with "clear drawing when hidden" on (not saved otherwise)
+//!       Read by pen-ink's renderer: PEN_BACKEND = dx12 (default on Windows) | vulkan,
+//!       PEN_DX12 = visual (default, DirectComposition, needed for transparency) | hwnd,
+//!       PEN_PRESENT = (default: mailbox if available) | vsync | fifo | mailbox | immediate
 
 #[cfg(windows)]
 mod input_win;
