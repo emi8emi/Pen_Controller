@@ -36,6 +36,15 @@ const PEN_FLAG_ERASER: u32 = 0x0000_0004;
 
 const SUBCLASS_ID: usize = 1;
 
+// WM_TABLET_QUERYSYSTEMGESTURESTATUS = WM_TABLET_FIRST + 12. Windows asks the window which pen system
+// gestures it wants; answering with "disable" bits stops the press-and-hold ring and the barrel-button
+// (right-click) visualisation, and the right-click that follows them.
+const WM_TABLET_QUERYSYSTEMGESTURESTATUS: u32 = 0x02CC;
+const TABLET_DISABLE_PRESSANDHOLD: isize = 0x0000_0001;
+const TABLET_DISABLE_PENTAPFEEDBACK: isize = 0x0000_0008;
+const TABLET_DISABLE_PENBARRELFEEDBACK: isize = 0x0000_0010;
+const TABLET_DISABLE_FLICKS: isize = 0x0001_0000;
+
 struct State {
     sink: Box<dyn FnMut(&[Sample])>,
     in_contact: bool,
@@ -88,6 +97,11 @@ unsafe extern "system" fn subclass_proc(
         let _ = RemoveWindowSubclass(hwnd, Some(subclass_proc), id);
         drop(Box::from_raw(data as *mut RefCell<State>));
         return DefSubclassProc(hwnd, msg, wparam, lparam);
+    }
+    if msg == WM_TABLET_QUERYSYSTEMGESTURESTATUS {
+        return LRESULT(
+            TABLET_DISABLE_PRESSANDHOLD | TABLET_DISABLE_PENTAPFEEDBACK | TABLET_DISABLE_PENBARRELFEEDBACK | TABLET_DISABLE_FLICKS,
+        );
     }
     if matches!(msg, WM_POINTERDOWN | WM_POINTERUPDATE | WM_POINTERUP) {
         let cell = &*(data as *const RefCell<State>);
