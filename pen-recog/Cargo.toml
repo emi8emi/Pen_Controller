@@ -1,0 +1,10 @@
+[package]
+name = "pen-recog"
+version = "0.1.0"
+edition = "2021"
+
+# Template matching for pen input: strokes in, ranked labels out. Symbols, shorthand, a personal
+# "this scribble means that phrase" dictionary. Depends on the pen controller's protocol crate and nothing
+# else (no windowing, no serde, no OS API), so any project that gets pen samples from the controller can use it.
+[dependencies]
+pen-proto = { path = "../pen-proto" }

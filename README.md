@@ -11,6 +11,7 @@ dismisses, drawing pressure-sensitive ink with wgpu. Meant to become a dependenc
 | `pen-proto` | Wire protocol: samples, presence, mode/canvas/brush messages, framing, a streaming decoder. No dependencies. | 12 unit tests |
 | `pen-core` | `Lifecycle`: the show/hide rules as a pure state machine. `pen_win` (Windows only): raw-input pen presence, real-mouse detection, per-tablet `DeviceProfile`. `pointer` (Windows only): pen samples from `WM_POINTER` to a callback, state per window. `overlay` (Windows only): non-activating overlay window styles, show/hide. | 13 unit tests (11 lifecycle, 2 pointer) |
 | `pen-ink` | The ink, shared with the sketch studio: `brush.rs` turns samples into dabs (configurable through `BrushConfig`; the default is the original brush), `renderer.rs` has the `InkRenderer` trait and the wgpu renderer (no windowing crate; the controller's border is a `RendererOptions` setting). | 11 unit tests (brush) |
+| `pen-recog` | Template matching for pen drawings (a $P point-cloud matcher): label examples, then rank labels for a new drawing, whatever its size, position, stroke order or stroke count. A text file format for the library, and `strokes_from_samples` to turn the controller's samples into strokes. Depends on `pen-proto` only (no serde, no OS API), so any client of the controller can use it. Does not read free handwriting; it knows the symbols and phrases you teach it. | 18 unit tests + 1 doctest |
 | `controller` | The app. `main.rs` wires things together, `input_win.rs` is thin glue from the winit window to `pen-core`'s `pointer` and `overlay`. | none |
 
 The Windows and wgpu code (`pen_win`, `overlay`, the `WM_POINTER` handling in `pointer`, `input_win`, the wgpu renderer, `main`) is not covered by the tests: it
@@ -50,7 +51,7 @@ Environment variables: `PEN_REDIRECT` (set it to keep the window's redirection b
 ## Tests
 
 ```
-cargo test -p pen-proto -p pen-core -p pen-ink
+cargo test -p pen-proto -p pen-core -p pen-ink -p pen-recog
 ```
 
 (`controller` needs Windows and a recent Rust to build: `cargo build -p controller`.)
