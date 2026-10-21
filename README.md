@@ -56,6 +56,13 @@ cargo test -p pen-proto -p pen-core -p pen-ink -p pen-recog
 
 (`controller` needs Windows and a recent Rust to build: `cargo build -p controller`.)
 
+## Linux stuff
+
+sway config:
+```
+for_window [title="pen controller"] floating enable, border none, resize set 1920 1080, move position 0 0
+```
+
 ## Protocol
 
 Frames are `u32 length` | `u8 tag` | payload, little-endian. A sample is a fixed 40-byte body, so a client
