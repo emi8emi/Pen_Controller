@@ -23,7 +23,10 @@ pub fn install(window: &winit::window::Window) {
     overlay::apply_overlay_styles(hwnd);
     let result = pointer::install(hwnd, |samples| {
         let recv = Instant::now();
-        QUEUE.lock().unwrap().extend(samples.iter().map(|s| Incoming { sample: *s, recv }));
+        QUEUE
+            .lock()
+            .unwrap()
+            .extend(samples.iter().map(|s| Incoming { sample: *s, recv }));
         send(UserEvent::Samples);
     });
     if let Err(e) = result {

@@ -40,7 +40,9 @@ use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use pen_core::{Action, Lifecycle};
 use pen_ink::{Border, InkRenderer, RendererOptions, Stroker, WgpuRenderer};
 use pen_proto::{CanvasOptions, Phase, Sample};
+#[cfg(windows)]
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+#[cfg(windows)]
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -54,6 +56,12 @@ const OCCLUSION_GAP_PX: u32 = 1;
 
 /// The pen will not summon the overlay while one of these programs has focus (case-insensitive).
 const IGNORE_APPS: &[&str] = &["krita.exe", "CLIPStudioPaint.exe", "Photoshop.exe"];
+
+const BORDER: Border = Border {
+    width_px: 3.0,
+    rgb: [1.0, 0.282, 0.690],
+    alpha: 0.55,
+};
 
 /// A sample plus when our window procedure saw it (for the timing printout).
 pub(crate) struct Incoming {
@@ -79,6 +87,8 @@ pub(crate) enum Command {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum UserEvent {
+    #[cfg(target_os = "linux")]
+    Pen,
     /// New pen samples are waiting in `QUEUE`.
     Samples,
     /// The lifecycle decided to show or hide the overlay (from the pen thread).
@@ -122,7 +132,11 @@ impl Stats {
         self.sum += us;
         self.max = self.max.max(us);
         if self.n == 200 {
-            eprintln!("event -> present() call: avg {} us, max {} us (software side only)", self.sum / self.n, self.max);
+            eprintln!(
+                "event -> present() call: avg {} us, max {} us (software side only)",
+                self.sum / self.n,
+                self.max
+            );
             *self = Stats::default();
         }
     }
@@ -130,7 +144,10 @@ impl Stats {
 
 /// Cover the primary monitor, minus the strip at the top described at `OCCLUSION_GAP_PX`.
 fn fit_to_monitor(window: &Window) {
-    if let Some(mon) = window.primary_monitor().or_else(|| window.current_monitor()) {
+    if let Some(mon) = window
+        .primary_monitor()
+        .or_else(|| window.current_monitor())
+    {
         let pos = mon.position();
         let size = mon.size();
         let gap = OCCLUSION_GAP_PX.min(size.height.saturating_sub(1));
@@ -140,9 +157,14 @@ fn fit_to_monitor(window: &Window) {
 }
 
 /// The tray icon: pink normally, blue-grey while hands-off is on.
+#[cfg(windows)]
 fn make_icon(hands_off: bool) -> Icon {
     const N: u32 = 32;
-    let fill: [u8; 3] = if hands_off { [120, 128, 160] } else { [255, 72, 176] };
+    let fill: [u8; 3] = if hands_off {
+        [120, 128, 160]
+    } else {
+        [255, 72, 176]
+    };
     let ring: [u8; 3] = [26, 31, 58];
     let c = (N as f32 - 1.0) / 2.0;
     let mut rgba = Vec::with_capacity((N * N * 4) as usize);
@@ -159,6 +181,7 @@ fn make_icon(hands_off: bool) -> Icon {
 
 /// The tray icon and its menu. Check items flip themselves when clicked, so after every command the
 /// app sets them again from the real state (`sync`), which also covers changes made by hotkeys.
+#[cfg(windows)]
 struct Tray {
     icon: TrayIcon,
     auto: CheckMenuItem,
@@ -166,12 +189,19 @@ struct Tray {
     hands: CheckMenuItem,
 }
 
+#[cfg(windows)]
 impl Tray {
     fn new(options: CanvasOptions) -> Result<Tray, Box<dyn std::error::Error>> {
         let toggle = MenuItem::new("Show / hide overlay  (Ctrl+Alt+D)", true, None);
         let auto = CheckMenuItem::new("Show when the pen is used  (Ctrl+Alt+A)", true, true, None);
-        let clear = CheckMenuItem::new("Clear drawing when hidden", true, options.clear_on_dismiss, None);
-        let hands = CheckMenuItem::new("Hands-off: ignore hotkeys  (Ctrl+Alt+K)", true, false, None);
+        let clear = CheckMenuItem::new(
+            "Clear drawing when hidden",
+            true,
+            options.clear_on_dismiss,
+            None,
+        );
+        let hands =
+            CheckMenuItem::new("Hands-off: ignore hotkeys  (Ctrl+Alt+K)", true, false, None);
         let quit = MenuItem::new("Quit", true, None);
         let menu = Menu::new();
         menu.append_items(&[
@@ -185,7 +215,13 @@ impl Tray {
         ])?;
 
         // menu clicks arrive on another thread: translate them into commands for the main loop
-        let ids = [toggle.id().clone(), auto.id().clone(), clear.id().clone(), hands.id().clone(), quit.id().clone()];
+        let ids = [
+            toggle.id().clone(),
+            auto.id().clone(),
+            clear.id().clone(),
+            hands.id().clone(),
+            quit.id().clone(),
+        ];
         MenuEvent::set_event_handler(Some(move |e: MenuEvent| {
             let cmd = if e.id == ids[0] {
                 Command::Toggle
@@ -208,7 +244,12 @@ impl Tray {
             .with_tooltip("Pen controller")
             .with_icon(make_icon(false))
             .build()?;
-        Ok(Tray { icon, auto, clear, hands })
+        Ok(Tray {
+            icon,
+            auto,
+            clear,
+            hands,
+        })
     }
 
     fn sync(&self, auto_show: bool, hands_off: bool, clear_on_dismiss: bool) {
@@ -216,8 +257,19 @@ impl Tray {
         self.clear.set_checked(clear_on_dismiss);
         self.hands.set_checked(hands_off);
         let _ = self.icon.set_icon(Some(make_icon(hands_off)));
-        let _ = self.icon.set_tooltip(Some(if hands_off { "Pen controller (hands-off)" } else { "Pen controller" }));
+        let _ = self.icon.set_tooltip(Some(if hands_off {
+            "Pen controller (hands-off)"
+        } else {
+            "Pen controller"
+        }));
     }
+}
+
+#[cfg(not(windows))]
+struct Tray;
+#[cfg(not(windows))]
+impl Tray {
+    fn sync(&self, _auto_show: bool, _hands_off: bool, _clear: bool) {}
 }
 
 /// The global hotkeys. Hands-off releases all of them except `hands`.
@@ -229,6 +281,14 @@ struct Keys {
 }
 
 struct App {
+    #[cfg(target_os = "linux")]
+    pen_in_range: bool,
+    #[cfg(target_os = "linux")]
+    dismiss_at: Option<Instant>,
+    #[cfg(target_os = "linux")]
+    pen: Option<Arc<pen_core::pen_evdev::PenState>>,
+    #[cfg(target_os = "linux")]
+    pen_contact: bool,
     window: Option<Arc<Window>>,
     renderer: Option<Box<dyn InkRenderer>>,
     stroker: Stroker,
@@ -237,6 +297,7 @@ struct App {
     mouse_down: bool,
     /// Canvas behaviour. A client will be able to set this through the protocol; for now the tray does.
     options: CanvasOptions,
+    #[cfg_attr(not(windows), allow(dead_code))]
     tray: Option<Tray>,
     hotkeys: GlobalHotKeyManager,
     keys: Keys,
@@ -244,7 +305,9 @@ struct App {
 
 impl App {
     fn handle_batch(&mut self, batch: &[Incoming]) {
-        let Some(renderer) = self.renderer.as_mut() else { return };
+        let Some(renderer) = self.renderer.as_mut() else {
+            return;
+        };
         let mut dabs = Vec::new();
         for item in batch {
             self.stroker.feed(item.sample, &mut dabs);
@@ -280,7 +343,9 @@ impl App {
     }
 
     fn show(&mut self, pinned: bool) {
-        let Some(window) = self.window.clone() else { return };
+        let Some(window) = self.window.clone() else {
+            return;
+        };
         fit_to_monitor(&window);
         #[cfg(windows)]
         input_win::show_noactivate(&window);
@@ -290,6 +355,10 @@ impl App {
         if let Some(r) = self.renderer.as_mut() {
             r.present();
         }
+
+        #[cfg(target_os = "linux")]
+        self.set_passthrough(false);
+
         println!("overlay shown{}", if pinned { " (pinned)" } else { "" });
     }
 
@@ -309,6 +378,12 @@ impl App {
         println!("overlay hidden");
         self.stroker = Stroker::default();
         self.mouse_down = false;
+
+        #[cfg(target_os = "linux")]
+        {
+            self.set_passthrough(true);
+            self.pen_contact = false;
+        }
     }
 
     fn run(&mut self, action: Option<Action>) {
@@ -321,10 +396,21 @@ impl App {
 
     /// Hands-off: release every hotkey except the hands-off one (or take them back).
     fn release_hotkeys(&mut self, released: bool) {
-        for (name, key) in [("toggle", self.keys.toggle), ("auto-show", self.keys.auto), ("quit", self.keys.quit)] {
-            let result = if released { self.hotkeys.unregister(key) } else { self.hotkeys.register(key) };
+        for (name, key) in [
+            ("toggle", self.keys.toggle),
+            ("auto-show", self.keys.auto),
+            ("quit", self.keys.quit),
+        ] {
+            let result = if released {
+                self.hotkeys.unregister(key)
+            } else {
+                self.hotkeys.register(key)
+            };
             if let Err(e) = result {
-                eprintln!("could not {} the {name} hotkey: {e}", if released { "release" } else { "register" });
+                eprintln!(
+                    "could not {} the {name} hotkey: {e}",
+                    if released { "release" } else { "register" }
+                );
             }
         }
     }
@@ -357,15 +443,86 @@ impl App {
                     off
                 });
                 self.release_hotkeys(off);
-                println!("hands-off {}", if off { "ON: only Ctrl+Alt+K (and the tray menu) still work" } else { "off" });
+                println!(
+                    "hands-off {}",
+                    if off {
+                        "ON: only Ctrl+Alt+K (and the tray menu) still work"
+                    } else {
+                        "off"
+                    }
+                );
             }
             Command::ToggleClearOnDismiss => {
                 self.options.clear_on_dismiss = !self.options.clear_on_dismiss;
-                println!("clear drawing when hidden: {}", if self.options.clear_on_dismiss { "on" } else { "off" });
+                println!(
+                    "clear drawing when hidden: {}",
+                    if self.options.clear_on_dismiss {
+                        "on"
+                    } else {
+                        "off"
+                    }
+                );
             }
             Command::Quit => el.exit(),
         }
         self.sync_tray();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn pen_sample(&self, phase: Phase, pen: &pen_core::pen_evdev::PenState) -> Incoming {
+        let mut it = self.mouse_sample(phase);
+        it.sample.pressure = Some(pen.pressure());
+        it.sample.buttons = pen.barrel() as u8;
+        it
+    }
+
+    #[cfg(target_os = "linux")]
+    fn pen_changed(&mut self) {
+        let Some(pen) = self.pen.clone() else { return };
+
+        let in_range = pen.in_range();
+        if in_range != self.pen_in_range {
+            self.pen_in_range = in_range;
+            if in_range {
+                self.dismiss_at = None; // came back in time: cancel the pending dismiss
+                let a = lifecycle(|l| l.pen_summon(|| None));
+                self.run(a);
+            } else {
+                self.dismiss_at = Some(Instant::now() + dismiss_after());
+            }
+        }
+
+        let contact = pen.contact();
+        let phase = match (self.pen_contact, contact) {
+            (false, true) => Phase::Down,
+            (true, true) => Phase::Move,
+            (true, false) => Phase::Up,
+            (false, false) => return,
+        };
+        self.pen_contact = contact;
+        if !lifecycle(|l| l.is_visible()) {
+            return;
+        }
+        let item = self.pen_sample(phase, &pen);
+        self.handle_batch(&[item]);
+    }
+
+    /// Linux "hide": click-through and no border. (A Wayland client cannot unmap or hide itself the way
+    /// Windows can.) Ink stays visible unless clear-on-dismiss wiped it.
+    #[cfg(target_os = "linux")]
+    fn set_passthrough(&mut self, on: bool) {
+        if let Some(w) = self.window.as_ref() {
+            if let Err(e) = w.set_cursor_hittest(!on) {
+                eprintln!("set_cursor_hittest: {e}");
+            }
+        }
+        if let Some(r) = self.renderer.as_mut() {
+            r.set_options(RendererOptions {
+                border: if on { None } else { Some(BORDER) },
+                ..Default::default()
+            });
+            r.present();
+        }
     }
 }
 
@@ -404,7 +561,7 @@ impl ApplicationHandler<UserEvent> for App {
             (size.width, size.height),
             RendererOptions {
                 // 3 px, the shared pink at 55%: the border the overlay shows so you can tell it is up
-                border: Some(Border { width_px: 3.0, rgb: [1.0, 0.282, 0.690], alpha: 0.55 }),
+                border: Some(BORDER),
                 ..Default::default()
             },
         );
@@ -412,14 +569,39 @@ impl ApplicationHandler<UserEvent> for App {
         self.renderer = Some(Box::new(renderer));
         self.window = Some(window);
 
-        // winit: the earliest a tray icon can be created is once the loop is running
-        match Tray::new(self.options) {
-            Ok(tray) => self.tray = Some(tray),
-            Err(e) => eprintln!("no tray icon: {e}"),
+        #[cfg(windows)]
+        {
+            match Tray::new(self.options) {
+                Ok(tray) => self.tray = Some(tray),
+                Err(e) => eprintln!("no tray icon: {e}"),
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if std::env::var("PEN_PINNED").is_ok() {
+                let a = lifecycle(|l| l.show_pinned()); // old behaviour, for comparison
+                self.run(a);
+            } else {
+                self.set_passthrough(true); // start "hidden"
+            }
         }
         println!("Hidden. Bring the pen near the tablet to show it. Ctrl+Alt+D pins it, Ctrl+Alt+K hands-off, Ctrl+Alt+Q quits.");
     }
 
+        #[cfg(target_os = "linux")]
+        fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+            match self.dismiss_at {
+                Some(t) if Instant::now() >= t => {
+                    self.dismiss_at = None;
+                    el.set_control_flow(ControlFlow::Wait);
+                    let a = lifecycle(|l| l.mouse_moved()); // same rule as the Windows mouse dismiss
+                    self.run(a);
+                }
+                Some(t) => el.set_control_flow(ControlFlow::WaitUntil(t)),
+                None => el.set_control_flow(ControlFlow::Wait),
+            }
+        }
+        
     fn user_event(&mut self, el: &ActiveEventLoop, ev: UserEvent) {
         match ev {
             UserEvent::Samples => {
@@ -430,6 +612,8 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::Overlay(action) => self.run(Some(action)),
             UserEvent::Command(cmd) => self.command(el, cmd),
+            #[cfg(target_os = "linux")]
+            UserEvent::Pen => self.pen_changed(),
         }
     }
 
@@ -446,17 +630,40 @@ impl ApplicationHandler<UserEvent> for App {
                     r.present();
                 }
             }
-            // mouse fallback so the prototype is usable without a pen
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x as f32, position.y as f32);
+                #[cfg(target_os = "linux")]
+                {
+                    if let Some(pen) = self.pen.clone() {
+                        if self.pen_contact {
+                            let item = self.pen_sample(Phase::Move, &pen);
+                            self.handle_batch(&[item]);
+                        }
+                        return; // the pen device drives inking; the touchpad no longer draws
+                    }
+                }
                 if self.mouse_down {
                     let item = self.mouse_sample(Phase::Move);
                     self.handle_batch(&[item]);
                 }
             }
-            WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => {
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Left,
+                ..
+            } => {
+                #[cfg(target_os = "linux")]
+                {
+                    if self.pen.is_some() {
+                        return;
+                    }
+                }
                 self.mouse_down = state == ElementState::Pressed;
-                let phase = if self.mouse_down { Phase::Down } else { Phase::Up };
+                let phase = if self.mouse_down {
+                    Phase::Down
+                } else {
+                    Phase::Up
+                };
                 let item = self.mouse_sample(phase);
                 self.handle_batch(&[item]);
             }
@@ -465,11 +672,22 @@ impl ApplicationHandler<UserEvent> for App {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn dismiss_after() -> std::time::Duration {
+    let ms = std::env::var("PEN_DISMISS_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1500);
+    std::time::Duration::from_millis(ms)
+}
+
 fn main() {
     let _ = START.set(Instant::now());
     let _ = LIFECYCLE.set(Mutex::new(Lifecycle::new(IGNORE_APPS)));
 
-    let event_loop = EventLoop::<UserEvent>::with_user_event().build().expect("event loop");
+    let event_loop = EventLoop::<UserEvent>::with_user_event()
+        .build()
+        .expect("event loop");
     event_loop.set_control_flow(ControlFlow::Wait);
     *PROXY.lock().unwrap() = Some(event_loop.create_proxy());
 
@@ -483,13 +701,23 @@ fn main() {
         quit: HotKey::new(mods, Code::KeyQ),
         hands: HotKey::new(mods, Code::KeyK),
     };
-    for (name, key) in [("toggle", keys.toggle), ("auto-show", keys.auto), ("hands-off", keys.hands), ("quit", keys.quit)] {
+    for (name, key) in [
+        ("toggle", keys.toggle),
+        ("auto-show", keys.auto),
+        ("hands-off", keys.hands),
+        ("quit", keys.quit),
+    ] {
         if let Err(e) = hotkeys.register(key) {
             // usually means another program already owns that combination
             eprintln!("could not register the {name} hotkey: {e}");
         }
     }
-    let ids = [keys.toggle.id(), keys.auto.id(), keys.hands.id(), keys.quit.id()];
+    let ids = [
+        keys.toggle.id(),
+        keys.auto.id(),
+        keys.hands.id(),
+        keys.quit.id(),
+    ];
     GlobalHotKeyEvent::set_event_handler(Some(move |e: GlobalHotKeyEvent| {
         if e.state != HotKeyState::Pressed {
             return;
@@ -519,14 +747,27 @@ fn main() {
         });
     }
 
+    #[cfg(target_os = "linux")]
+    let pen = pen_core::pen_evdev::spawn(|| send(UserEvent::Pen));
+
     let mut app = App {
+        #[cfg(target_os = "linux")]
+        pen_in_range: false,
+        #[cfg(target_os = "linux")]
+        dismiss_at: None,
+        #[cfg(target_os = "linux")]
+        pen,
+        #[cfg(target_os = "linux")]
+        pen_contact: false,
         window: None,
         renderer: None,
         stroker: Stroker::default(),
         stats: Stats::default(),
         cursor: (0.0, 0.0),
         mouse_down: false,
-        options: CanvasOptions { clear_on_dismiss: std::env::var("PEN_CLEAR_ON_DISMISS").is_ok() },
+        options: CanvasOptions {
+            clear_on_dismiss: std::env::var("PEN_CLEAR_ON_DISMISS").is_ok(),
+        },
         tray: None,
         hotkeys,
         keys,
