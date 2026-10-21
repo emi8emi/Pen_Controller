@@ -9,8 +9,8 @@ use std::ffi::c_void;
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowLongPtrW, SetWindowLongPtrW, ShowWindow, GWL_EXSTYLE, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_APPWINDOW,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    GetWindowLongPtrW, SetWindowLongPtrW, ShowWindow, GWL_EXSTYLE, SW_HIDE, SW_SHOWNOACTIVATE,
+    WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
 /// Non-activating tool window that stays out of Alt+Tab and the taskbar. WS_EX_APPWINDOW has to be
@@ -20,8 +20,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 pub fn apply_overlay_styles(hwnd: *mut c_void) {
     unsafe {
         let hwnd = HWND(hwnd);
-        let ex = (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 | WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0)
-            & !WS_EX_APPWINDOW.0;
+        let ex =
+            (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 | WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0)
+                & !WS_EX_APPWINDOW.0;
         let _ = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex as isize);
     }
 }

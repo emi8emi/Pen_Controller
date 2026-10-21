@@ -46,8 +46,12 @@ pub struct DeviceProfile {
 }
 
 /// Wacom Intuos S (CTL-4100), as measured on the author's tablet.
-pub const WACOM_CTL_4100: DeviceProfile =
-    DeviceProfile { report_id: 0xD5, flags_byte: 1, tip_mask: 0x01, in_range_mask: 0x20 };
+pub const WACOM_CTL_4100: DeviceProfile = DeviceProfile {
+    report_id: 0xD5,
+    flags_byte: 1,
+    tip_mask: 0x01,
+    in_range_mask: 0x20,
+};
 
 static PROFILE: OnceLock<DeviceProfile> = OnceLock::new();
 
@@ -62,7 +66,11 @@ struct State {
     tip: bool,
     last_report: Option<Instant>,
 }
-static STATE: Mutex<State> = Mutex::new(State { in_range: false, tip: false, last_report: None });
+static STATE: Mutex<State> = Mutex::new(State {
+    in_range: false,
+    tip: false,
+    last_report: None,
+});
 
 fn emit(ev: PenEvent) {
     if let Some(cb) = CALLBACK.get() {
@@ -100,7 +108,9 @@ pub fn foreground_exe() -> Option<String> {
         let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, BOOL(0), pid).ok()?;
         let mut buf = [0u16; 512];
         let mut len = buf.len() as u32;
-        let ok = QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len).is_ok();
+        let ok =
+            QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len)
+                .is_ok();
         let _ = CloseHandle(h);
         if !ok {
             return None;
@@ -142,7 +152,13 @@ unsafe fn on_raw_input(lparam: LPARAM) {
     }
     // u64 buffer keeps the RAWINPUT cast aligned
     let mut buf = vec![0u64; (size as usize + 7) / 8];
-    let got = GetRawInputData(h, RID_INPUT, Some(buf.as_mut_ptr() as *mut c_void), &mut size, hdr_size);
+    let got = GetRawInputData(
+        h,
+        RID_INPUT,
+        Some(buf.as_mut_ptr() as *mut c_void),
+        &mut size,
+        hdr_size,
+    );
     if got == u32::MAX {
         return;
     }
@@ -176,7 +192,12 @@ unsafe fn on_raw_input(lparam: LPARAM) {
     }
 }
 
-unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn wnd_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
     if msg == WM_INPUT {
         on_raw_input(lparam);
     }
@@ -200,7 +221,10 @@ unsafe fn run() -> windows::core::Result<()> {
         class,
         w!("pen-overlay-input"),
         WINDOW_STYLE(0),
-        0, 0, 0, 0,
+        0,
+        0,
+        0,
+        0,
         HWND_MESSAGE,
         None,
         hinst,
@@ -209,8 +233,18 @@ unsafe fn run() -> windows::core::Result<()> {
 
     // 0x0D = Digitizers; 0x02 = Pen, 0x01 = Digitizer
     let devs = [
-        RAWINPUTDEVICE { usUsagePage: 0x0D, usUsage: 0x02, dwFlags: RIDEV_INPUTSINK, hwndTarget: hwnd },
-        RAWINPUTDEVICE { usUsagePage: 0x0D, usUsage: 0x01, dwFlags: RIDEV_INPUTSINK, hwndTarget: hwnd },
+        RAWINPUTDEVICE {
+            usUsagePage: 0x0D,
+            usUsage: 0x02,
+            dwFlags: RIDEV_INPUTSINK,
+            hwndTarget: hwnd,
+        },
+        RAWINPUTDEVICE {
+            usUsagePage: 0x0D,
+            usUsage: 0x01,
+            dwFlags: RIDEV_INPUTSINK,
+            hwndTarget: hwnd,
+        },
     ];
     RegisterRawInputDevices(&devs, size_of::<RAWINPUTDEVICE>() as u32)?;
 

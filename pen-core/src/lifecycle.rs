@@ -167,7 +167,10 @@ mod tests {
         let mut l = lc();
         assert_eq!(l.pen_summon(|| Some("KRITA.EXE".to_string())), None);
         assert!(!l.is_visible());
-        assert_eq!(l.pen_summon(|| Some("notepad.exe".to_string())), Some(Action::Show { pinned: false }));
+        assert_eq!(
+            l.pen_summon(|| Some("notepad.exe".to_string())),
+            Some(Action::Show { pinned: false })
+        );
     }
 
     #[test]

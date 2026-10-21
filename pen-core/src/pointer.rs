@@ -24,7 +24,9 @@ use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::Input::Pointer::{GetPointerPenInfoHistory, POINTER_PEN_INFO};
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
-use windows::Win32::UI::WindowsAndMessaging::{WM_NCDESTROY, WM_POINTERDOWN, WM_POINTERUP, WM_POINTERUPDATE};
+use windows::Win32::UI::WindowsAndMessaging::{
+    WM_NCDESTROY, WM_POINTERDOWN, WM_POINTERUP, WM_POINTERUPDATE,
+};
 
 // Plain u32 values: pointerFlags is a POINTER_FLAGS newtype (use .0), penMask and penFlags are bare u32.
 const POINTER_FLAG_INCONTACT: u32 = 0x0000_0004;
@@ -56,10 +58,18 @@ struct State {
 /// and its state are removed automatically when the window is destroyed.
 pub fn install(hwnd: *mut c_void, sink: impl FnMut(&[Sample]) + 'static) -> io::Result<()> {
     if hwnd.is_null() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "null window handle"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "null window handle",
+        ));
     }
-    let state = Box::into_raw(Box::new(RefCell::new(State { sink: Box::new(sink), in_contact: false })));
-    let ok = unsafe { SetWindowSubclass(HWND(hwnd), Some(subclass_proc), SUBCLASS_ID, state as usize) }.as_bool();
+    let state = Box::into_raw(Box::new(RefCell::new(State {
+        sink: Box::new(sink),
+        in_contact: false,
+    })));
+    let ok =
+        unsafe { SetWindowSubclass(HWND(hwnd), Some(subclass_proc), SUBCLASS_ID, state as usize) }
+            .as_bool();
     if ok {
         Ok(())
     } else {
@@ -100,7 +110,10 @@ unsafe extern "system" fn subclass_proc(
     }
     if msg == WM_TABLET_QUERYSYSTEMGESTURESTATUS {
         return LRESULT(
-            TABLET_DISABLE_PRESSANDHOLD | TABLET_DISABLE_PENTAPFEEDBACK | TABLET_DISABLE_PENBARRELFEEDBACK | TABLET_DISABLE_FLICKS,
+            TABLET_DISABLE_PRESSANDHOLD
+                | TABLET_DISABLE_PENTAPFEEDBACK
+                | TABLET_DISABLE_PENBARRELFEEDBACK
+                | TABLET_DISABLE_FLICKS,
         );
     }
     if matches!(msg, WM_POINTERDOWN | WM_POINTERUPDATE | WM_POINTERUP) {
@@ -134,7 +147,11 @@ unsafe fn handle(hwnd: HWND, state: &mut State, wparam: WPARAM) -> bool {
         let pi = &info.pointerInfo;
         let contact = pi.pointerFlags.0 & POINTER_FLAG_INCONTACT != 0;
         // Capabilities the pen does not report stay None (never a fake zero).
-        let pressure = if info.penMask & PEN_MASK_PRESSURE != 0 { Some(pressure_01(info.pressure)) } else { None };
+        let pressure = if info.penMask & PEN_MASK_PRESSURE != 0 {
+            Some(pressure_01(info.pressure))
+        } else {
+            None
+        };
         let tilt = if info.penMask & PEN_MASK_TILT_X != 0 && info.penMask & PEN_MASK_TILT_Y != 0 {
             Some((info.tiltX as f32, info.tiltY as f32))
         } else {
@@ -144,7 +161,10 @@ unsafe fn handle(hwnd: HWND, state: &mut State, wparam: WPARAM) -> bool {
         let buttons = (info.penFlags & PEN_FLAG_BARREL != 0) as u8;
         // NOTE: integer pixels, so strokes can look slightly stepped. Next step: use
         // ptHimetricLocationRaw + GetPointerDeviceRects for sub-pixel positions.
-        let mut p = POINT { x: pi.ptPixelLocation.x, y: pi.ptPixelLocation.y };
+        let mut p = POINT {
+            x: pi.ptPixelLocation.x,
+            y: pi.ptPixelLocation.y,
+        };
         let _ = ScreenToClient(hwnd, &mut p);
 
         let prev = std::mem::replace(&mut state.in_contact, contact);

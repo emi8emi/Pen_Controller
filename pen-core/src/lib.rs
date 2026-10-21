@@ -3,6 +3,9 @@
 //! Windows windows are passed in as raw `HWND` pointers (`*mut c_void`), so this crate does not depend on
 //! winit or on a particular version of the `windows` crate in its public API.
 
+#[cfg(target_os = "linux")]
+pub mod pen_evdev;
+
 pub mod lifecycle;
 #[cfg(windows)]
 pub mod overlay;
