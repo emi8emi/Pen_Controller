@@ -134,9 +134,14 @@ pub struct Capabilities {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ServerMsg {
-    Hello { protocol: u16, capabilities: Capabilities },
+    Hello {
+        protocol: u16,
+        capabilities: Capabilities,
+    },
     /// The pen came into range / left the overlay (Presence mode clients mostly care about this).
-    Presence { active: bool },
+    Presence {
+        active: bool,
+    },
     Sample(Sample),
 }
 
@@ -299,9 +304,21 @@ fn read_sample(r: &mut Reader) -> Result<Sample, DecodeError> {
         phase,
         x,
         y,
-        tablet: if flags & F_TABLET != 0 { Some((tablet_x, tablet_y)) } else { None },
-        pressure: if flags & F_PRESSURE != 0 { Some(pressure) } else { None },
-        tilt: if flags & F_TILT != 0 { Some((tilt_x, tilt_y)) } else { None },
+        tablet: if flags & F_TABLET != 0 {
+            Some((tablet_x, tablet_y))
+        } else {
+            None
+        },
+        pressure: if flags & F_PRESSURE != 0 {
+            Some(pressure)
+        } else {
+            None
+        },
+        tilt: if flags & F_TILT != 0 {
+            Some((tilt_x, tilt_y))
+        } else {
+            None
+        },
         buttons,
         eraser: flags & F_ERASER != 0,
         t_us,
@@ -310,7 +327,11 @@ fn read_sample(r: &mut Reader) -> Result<Sample, DecodeError> {
 }
 
 fn caps_to_byte(c: &Capabilities) -> u8 {
-    (c.pressure as u8) | ((c.tilt as u8) << 1) | ((c.hover as u8) << 2) | ((c.eraser as u8) << 3) | ((c.hardware_time as u8) << 4)
+    (c.pressure as u8)
+        | ((c.tilt as u8) << 1)
+        | ((c.hover as u8) << 2)
+        | ((c.eraser as u8) << 3)
+        | ((c.hardware_time as u8) << 4)
 }
 
 fn caps_from_byte(b: u8) -> Result<Capabilities, DecodeError> {
@@ -346,7 +367,10 @@ impl Message for ServerMsg {
     fn write_body(&self, out: &mut Vec<u8>) -> u8 {
         let mut w = Writer(std::mem::take(out));
         let tag = match self {
-            ServerMsg::Hello { protocol, capabilities } => {
+            ServerMsg::Hello {
+                protocol,
+                capabilities,
+            } => {
                 w.u16(*protocol);
                 w.u8(caps_to_byte(capabilities));
                 S_HELLO
@@ -367,7 +391,10 @@ impl Message for ServerMsg {
     fn read_body(tag: u8, body: &[u8]) -> Result<Self, DecodeError> {
         let mut r = Reader(body);
         let msg = match tag {
-            S_HELLO => ServerMsg::Hello { protocol: r.u16()?, capabilities: caps_from_byte(r.u8()?)? },
+            S_HELLO => ServerMsg::Hello {
+                protocol: r.u16()?,
+                capabilities: caps_from_byte(r.u8()?)?,
+            },
             S_PRESENCE => ServerMsg::Presence {
                 active: match r.u8()? {
                     0 => false,
@@ -428,7 +455,11 @@ impl Message for ClientMsg {
                 C_BRUSH
             }
             ClientMsg::SetCanvasOptions(o) => {
-                w.u8(if o.clear_on_dismiss { OPT_CLEAR_ON_DISMISS } else { 0 });
+                w.u8(if o.clear_on_dismiss {
+                    OPT_CLEAR_ON_DISMISS
+                } else {
+                    0
+                });
                 C_OPTIONS
             }
             ClientMsg::ClearCanvas => C_CLEAR,
@@ -443,11 +474,18 @@ impl Message for ClientMsg {
             C_HELLO => {
                 let protocol = r.u16()?;
                 let n = r.u8()? as usize;
-                let name = std::str::from_utf8(r.take(n)?).map_err(|_| DecodeError::BadValue("name"))?.to_string();
+                let name = std::str::from_utf8(r.take(n)?)
+                    .map_err(|_| DecodeError::BadValue("name"))?
+                    .to_string();
                 ClientMsg::Hello { protocol, name }
             }
             C_MODE => ClientMsg::SetMode(Mode::from_u8(r.u8()?)?),
-            C_CANVAS => ClientMsg::SetCanvas(Rect { x: r.i32()?, y: r.i32()?, w: r.u32()?, h: r.u32()? }),
+            C_CANVAS => ClientMsg::SetCanvas(Rect {
+                x: r.i32()?,
+                y: r.i32()?,
+                w: r.u32()?,
+                h: r.u32()?,
+            }),
             C_BRUSH => {
                 let size = r.f32()?;
                 let opacity = r.f32()?;
@@ -457,14 +495,21 @@ impl Message for ClientMsg {
                     1 => true,
                     _ => return Err(DecodeError::BadValue("size_from_pressure")),
                 };
-                ClientMsg::SetBrush(Brush { size, opacity, rgb, size_from_pressure })
+                ClientMsg::SetBrush(Brush {
+                    size,
+                    opacity,
+                    rgb,
+                    size_from_pressure,
+                })
             }
             C_OPTIONS => {
                 let flags = r.u8()?;
                 if flags & !OPT_CLEAR_ON_DISMISS != 0 {
                     return Err(DecodeError::BadValue("canvas options"));
                 }
-                ClientMsg::SetCanvasOptions(CanvasOptions { clear_on_dismiss: flags & OPT_CLEAR_ON_DISMISS != 0 })
+                ClientMsg::SetCanvasOptions(CanvasOptions {
+                    clear_on_dismiss: flags & OPT_CLEAR_ON_DISMISS != 0,
+                })
             }
             C_CLEAR => ClientMsg::ClearCanvas,
             t => return Err(DecodeError::BadTag(t)),
@@ -582,7 +627,13 @@ mod tests {
     fn server_messages_roundtrip() {
         roundtrip_server(ServerMsg::Hello {
             protocol: PROTOCOL_VERSION,
-            capabilities: Capabilities { pressure: true, tilt: false, hover: true, eraser: true, hardware_time: false },
+            capabilities: Capabilities {
+                pressure: true,
+                tilt: false,
+                hover: true,
+                eraser: true,
+                hardware_time: false,
+            },
         });
         roundtrip_server(ServerMsg::Presence { active: true });
         roundtrip_server(ServerMsg::Presence { active: false });
@@ -592,11 +643,26 @@ mod tests {
 
     #[test]
     fn client_messages_roundtrip() {
-        roundtrip_client(ClientMsg::Hello { protocol: 1, name: "written-to-voice".into() });
+        roundtrip_client(ClientMsg::Hello {
+            protocol: 1,
+            name: "written-to-voice".into(),
+        });
         roundtrip_client(ClientMsg::SetMode(Mode::Canvas));
-        roundtrip_client(ClientMsg::SetCanvas(Rect { x: -50, y: 10, w: 1920, h: 1079 }));
-        roundtrip_client(ClientMsg::SetBrush(Brush { size: 6.0, opacity: 0.5, rgb: [255, 72, 176], size_from_pressure: true }));
-        roundtrip_client(ClientMsg::SetCanvasOptions(CanvasOptions { clear_on_dismiss: true }));
+        roundtrip_client(ClientMsg::SetCanvas(Rect {
+            x: -50,
+            y: 10,
+            w: 1920,
+            h: 1079,
+        }));
+        roundtrip_client(ClientMsg::SetBrush(Brush {
+            size: 6.0,
+            opacity: 0.5,
+            rgb: [255, 72, 176],
+            size_from_pressure: true,
+        }));
+        roundtrip_client(ClientMsg::SetCanvasOptions(CanvasOptions {
+            clear_on_dismiss: true,
+        }));
         roundtrip_client(ClientMsg::SetCanvasOptions(CanvasOptions::default()));
         roundtrip_client(ClientMsg::ClearCanvas);
     }
@@ -610,7 +676,10 @@ mod tests {
     fn unknown_canvas_option_bits_are_rejected() {
         let mut d = FrameDecoder::new();
         d.push(&[2, 0, 0, 0, C_OPTIONS, 0x80]);
-        assert_eq!(d.next::<ClientMsg>(), Err(DecodeError::BadValue("canvas options")));
+        assert_eq!(
+            d.next::<ClientMsg>(),
+            Err(DecodeError::BadValue("canvas options"))
+        );
     }
 
     #[test]
@@ -633,7 +702,10 @@ mod tests {
         let frame = encode(&ServerMsg::Sample(full_sample()));
         // 4 length bytes + 1 tag + the fixed sample body
         assert_eq!(frame.len(), 4 + 1 + SAMPLE_BYTES);
-        assert_eq!(u32::from_le_bytes(frame[..4].try_into().unwrap()) as usize, 1 + SAMPLE_BYTES);
+        assert_eq!(
+            u32::from_le_bytes(frame[..4].try_into().unwrap()) as usize,
+            1 + SAMPLE_BYTES
+        );
     }
 
     #[test]
@@ -652,13 +724,25 @@ mod tests {
                 got.push(m);
             }
         }
-        assert_eq!(got, vec![ServerMsg::Presence { active: true }, ServerMsg::Sample(full_sample())]);
+        assert_eq!(
+            got,
+            vec![
+                ServerMsg::Presence { active: true },
+                ServerMsg::Sample(full_sample())
+            ]
+        );
 
         // both frames in a single push
         let mut d = FrameDecoder::new();
         d.push(&all);
-        assert!(matches!(d.next::<ServerMsg>().unwrap(), Some(ServerMsg::Presence { active: true })));
-        assert!(matches!(d.next::<ServerMsg>().unwrap(), Some(ServerMsg::Sample(_))));
+        assert!(matches!(
+            d.next::<ServerMsg>().unwrap(),
+            Some(ServerMsg::Presence { active: true })
+        ));
+        assert!(matches!(
+            d.next::<ServerMsg>().unwrap(),
+            Some(ServerMsg::Sample(_))
+        ));
         assert_eq!(d.next::<ServerMsg>().unwrap(), None);
     }
 
@@ -666,7 +750,10 @@ mod tests {
     fn oversize_and_zero_lengths_are_rejected() {
         let mut d = FrameDecoder::new();
         d.push(&(MAX_FRAME as u32 + 1).to_le_bytes());
-        assert_eq!(d.next::<ServerMsg>(), Err(DecodeError::BadLength(MAX_FRAME + 1)));
+        assert_eq!(
+            d.next::<ServerMsg>(),
+            Err(DecodeError::BadLength(MAX_FRAME + 1))
+        );
 
         let mut d = FrameDecoder::new();
         d.push(&0u32.to_le_bytes());
@@ -691,7 +778,10 @@ mod tests {
         frame[5 + 2] |= 0x80;
         let mut d = FrameDecoder::new();
         d.push(&frame);
-        assert_eq!(d.next::<ServerMsg>(), Err(DecodeError::BadValue("sample flags")));
+        assert_eq!(
+            d.next::<ServerMsg>(),
+            Err(DecodeError::BadValue("sample flags"))
+        );
     }
 
     #[test]
@@ -729,7 +819,13 @@ mod tests {
         bad.extend_from_slice(&encode(&ServerMsg::Presence { active: false }));
         let mut d = FrameDecoder::new();
         d.push(&bad);
-        assert_eq!(d.next::<ServerMsg>(), Err(DecodeError::BadValue("presence")));
-        assert_eq!(d.next::<ServerMsg>().unwrap(), Some(ServerMsg::Presence { active: false }));
+        assert_eq!(
+            d.next::<ServerMsg>(),
+            Err(DecodeError::BadValue("presence"))
+        );
+        assert_eq!(
+            d.next::<ServerMsg>().unwrap(),
+            Some(ServerMsg::Presence { active: false })
+        );
     }
 }

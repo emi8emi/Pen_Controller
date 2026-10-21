@@ -46,14 +46,30 @@ impl Default for BrushConfig {
 impl BrushConfig {
     pub fn radius(&self, pressure: f32) -> f32 {
         let p = pressure.clamp(0.0, 1.0);
-        let scale = if self.size_from_pressure { self.min_scale + (1.0 - self.min_scale) * p } else { 1.0 };
+        let scale = if self.size_from_pressure {
+            self.min_scale + (1.0 - self.min_scale) * p
+        } else {
+            1.0
+        };
         (self.size * 0.5 * scale).max(0.5)
     }
 }
 
 fn dab(cfg: &BrushConfig, x: f32, y: f32, p: f32) -> Dab {
-    let alpha = cfg.opacity.clamp(0.0, 1.0) * if cfg.opacity_from_pressure { p.clamp(0.0, 1.0) } else { 1.0 };
-    Dab { x, y, radius: cfg.radius(p), alpha, color: cfg.color, hardness: cfg.hardness }
+    let alpha = cfg.opacity.clamp(0.0, 1.0)
+        * if cfg.opacity_from_pressure {
+            p.clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+    Dab {
+        x,
+        y,
+        radius: cfg.radius(p),
+        alpha,
+        color: cfg.color,
+        hardness: cfg.hardness,
+    }
 }
 
 #[derive(Default)]
@@ -65,7 +81,11 @@ pub struct Stroker {
 
 impl Stroker {
     pub fn new(cfg: BrushConfig) -> Self {
-        Stroker { cfg, last: None, acc: 0.0 }
+        Stroker {
+            cfg,
+            last: None,
+            acc: 0.0,
+        }
     }
 
     pub fn config(&self) -> &BrushConfig {
@@ -93,7 +113,12 @@ impl Stroker {
                     let mut need = sp - self.acc;
                     while need <= l {
                         let t = need / l;
-                        out.push(dab(&self.cfg, lx + dx * t, ly + dy * t, lp + (pressure - lp) * t));
+                        out.push(dab(
+                            &self.cfg,
+                            lx + dx * t,
+                            ly + dy * t,
+                            lp + (pressure - lp) * t,
+                        ));
                         need += sp;
                     }
                     self.acc = l - (need - sp);
@@ -150,7 +175,10 @@ mod tests {
 
     #[test]
     fn a_tap_leaves_exactly_one_dab() {
-        let dabs = run(&[sample(Phase::Down, 10.0, 20.0, Some(1.0)), sample(Phase::Up, 10.0, 20.0, Some(0.0))]);
+        let dabs = run(&[
+            sample(Phase::Down, 10.0, 20.0, Some(1.0)),
+            sample(Phase::Up, 10.0, 20.0, Some(0.0)),
+        ]);
         assert_eq!(dabs.len(), 1);
         assert_eq!((dabs[0].x, dabs[0].y), (10.0, 20.0));
         assert_eq!(dabs[0].radius, radius_for(1.0));
@@ -158,13 +186,19 @@ mod tests {
 
     #[test]
     fn hovering_draws_nothing() {
-        let dabs = run(&[sample(Phase::Hover, 1.0, 1.0, Some(0.0)), sample(Phase::Hover, 50.0, 50.0, Some(0.0))]);
+        let dabs = run(&[
+            sample(Phase::Hover, 1.0, 1.0, Some(0.0)),
+            sample(Phase::Hover, 50.0, 50.0, Some(0.0)),
+        ]);
         assert!(dabs.is_empty());
     }
 
     #[test]
     fn a_straight_stroke_is_evenly_spaced() {
-        let dabs = run(&[sample(Phase::Down, 0.0, 0.0, Some(1.0)), sample(Phase::Move, 100.0, 0.0, Some(1.0))]);
+        let dabs = run(&[
+            sample(Phase::Down, 0.0, 0.0, Some(1.0)),
+            sample(Phase::Move, 100.0, 0.0, Some(1.0)),
+        ]);
         let spacing = (radius_for(1.0) * 0.15).max(0.7);
         assert!((80..=90).contains(&dabs.len()), "got {} dabs", dabs.len());
         for pair in dabs.windows(2) {
@@ -177,7 +211,10 @@ mod tests {
     #[test]
     fn spacing_carries_over_between_samples() {
         // the same stroke delivered as many small moves must produce the same dabs as one long move
-        let one = run(&[sample(Phase::Down, 0.0, 0.0, Some(1.0)), sample(Phase::Move, 60.0, 0.0, Some(1.0))]);
+        let one = run(&[
+            sample(Phase::Down, 0.0, 0.0, Some(1.0)),
+            sample(Phase::Move, 60.0, 0.0, Some(1.0)),
+        ]);
         let mut many = vec![sample(Phase::Down, 0.0, 0.0, Some(1.0))];
         for i in 1..=60 {
             many.push(sample(Phase::Move, i as f32, 0.0, Some(1.0)));
@@ -191,7 +228,10 @@ mod tests {
 
     #[test]
     fn pressure_changes_the_dab_size_along_the_stroke() {
-        let dabs = run(&[sample(Phase::Down, 0.0, 0.0, Some(0.1)), sample(Phase::Move, 80.0, 0.0, Some(1.0))]);
+        let dabs = run(&[
+            sample(Phase::Down, 0.0, 0.0, Some(0.1)),
+            sample(Phase::Move, 80.0, 0.0, Some(1.0)),
+        ]);
         assert!(dabs.first().unwrap().radius < dabs.last().unwrap().radius);
     }
 
@@ -214,8 +254,19 @@ mod tests {
 
     #[test]
     fn the_config_sets_colour_opacity_and_hardness_on_every_dab() {
-        let cfg = BrushConfig { color: [0.1, 0.2, 0.3], opacity: 0.4, hardness: 0.9, ..BrushConfig::default() };
-        let dabs = run_with(cfg, &[sample(Phase::Down, 0.0, 0.0, Some(1.0)), sample(Phase::Move, 30.0, 0.0, Some(1.0))]);
+        let cfg = BrushConfig {
+            color: [0.1, 0.2, 0.3],
+            opacity: 0.4,
+            hardness: 0.9,
+            ..BrushConfig::default()
+        };
+        let dabs = run_with(
+            cfg,
+            &[
+                sample(Phase::Down, 0.0, 0.0, Some(1.0)),
+                sample(Phase::Move, 30.0, 0.0, Some(1.0)),
+            ],
+        );
         assert!(dabs.len() > 1);
         for d in &dabs {
             assert_eq!(d.color, [0.1, 0.2, 0.3]);
@@ -226,14 +277,28 @@ mod tests {
 
     #[test]
     fn a_brush_without_size_from_pressure_ignores_pressure() {
-        let cfg = BrushConfig { size: 10.0, size_from_pressure: false, ..BrushConfig::default() };
-        let dabs = run_with(cfg, &[sample(Phase::Down, 0.0, 0.0, Some(0.1)), sample(Phase::Move, 40.0, 0.0, Some(1.0))]);
+        let cfg = BrushConfig {
+            size: 10.0,
+            size_from_pressure: false,
+            ..BrushConfig::default()
+        };
+        let dabs = run_with(
+            cfg,
+            &[
+                sample(Phase::Down, 0.0, 0.0, Some(0.1)),
+                sample(Phase::Move, 40.0, 0.0, Some(1.0)),
+            ],
+        );
         assert!(dabs.iter().all(|d| d.radius == 5.0));
     }
 
     #[test]
     fn opacity_from_pressure_scales_the_alpha() {
-        let cfg = BrushConfig { opacity: 0.8, opacity_from_pressure: true, ..BrushConfig::default() };
+        let cfg = BrushConfig {
+            opacity: 0.8,
+            opacity_from_pressure: true,
+            ..BrushConfig::default()
+        };
         let dabs = run_with(cfg, &[sample(Phase::Down, 0.0, 0.0, Some(0.5))]);
         assert!((dabs[0].alpha - 0.4).abs() < 1e-6);
     }

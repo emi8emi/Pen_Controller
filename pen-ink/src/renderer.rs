@@ -151,8 +151,7 @@ fn fs_full(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
 }
 "#;
 
-const DAB_ATTRS: [wgpu::VertexAttribute; 5] =
-    wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32, 2 => Float32, 3 => Float32x3, 4 => Float32];
+const DAB_ATTRS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32, 2 => Float32, 3 => Float32x3, 4 => Float32];
 
 pub struct WgpuRenderer {
     surface: wgpu::Surface<'static>,
@@ -176,8 +175,16 @@ pub struct WgpuRenderer {
 impl WgpuRenderer {
     /// `target`: the window (or anything else wgpu can make a surface from), e.g. an `Arc<winit::window::Window>`.
     /// `size`: its current size in pixels.
-    pub fn new(target: impl Into<wgpu::SurfaceTarget<'static>>, size: (u32, u32), options: RendererOptions) -> WgpuRenderer {
-        let backends = match std::env::var("PEN_BACKEND").unwrap_or_default().to_lowercase().as_str() {
+    pub fn new(
+        target: impl Into<wgpu::SurfaceTarget<'static>>,
+        size: (u32, u32),
+        options: RendererOptions,
+    ) -> WgpuRenderer {
+        let backends = match std::env::var("PEN_BACKEND")
+            .unwrap_or_default()
+            .to_lowercase()
+            .as_str()
+        {
             "vulkan" => wgpu::Backends::VULKAN,
             "dx12" => wgpu::Backends::DX12,
             _ if cfg!(windows) => wgpu::Backends::DX12,
@@ -187,7 +194,11 @@ impl WgpuRenderer {
         // DxgiFromVisual puts the swapchain on a DirectComposition visual, which is what makes per-pixel
         // transparency possible on DX12. The other option (DxgiFromHwnd) ignores alpha.
         // PEN_DX12=hwnd switches back to it, to compare.
-        let swapchain_kind = match std::env::var("PEN_DX12").unwrap_or_default().to_lowercase().as_str() {
+        let swapchain_kind = match std::env::var("PEN_DX12")
+            .unwrap_or_default()
+            .to_lowercase()
+            .as_str()
+        {
             "hwnd" => wgpu::Dx12SwapchainKind::DxgiFromHwnd,
             _ => wgpu::Dx12SwapchainKind::DxgiFromVisual,
         };
@@ -204,17 +215,29 @@ impl WgpuRenderer {
         }))
         .expect("no adapter");
         let (device, queue) =
-            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).expect("device");
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+                .expect("device");
 
         let caps = surface.get_capabilities(&adapter);
         let info = adapter.get_info();
-        println!("backend: {:?}   adapter: {}   dx12 presentation: {:?}", info.backend, info.name, swapchain_kind);
+        println!(
+            "backend: {:?}   adapter: {}   dx12 presentation: {:?}",
+            info.backend, info.name, swapchain_kind
+        );
         println!("formats:       {:?}", caps.formats);
         println!("present modes: {:?}", caps.present_modes);
         println!("alpha modes:   {:?}", caps.alpha_modes);
 
-        let format = caps.formats.iter().copied().find(|f| !f.is_srgb()).unwrap_or(caps.formats[0]);
-        let alpha_mode = if caps.alpha_modes.contains(&wgpu::CompositeAlphaMode::PreMultiplied) {
+        let format = caps
+            .formats
+            .iter()
+            .copied()
+            .find(|f| !f.is_srgb())
+            .unwrap_or(caps.formats[0]);
+        let alpha_mode = if caps
+            .alpha_modes
+            .contains(&wgpu::CompositeAlphaMode::PreMultiplied)
+        {
             wgpu::CompositeAlphaMode::PreMultiplied
         } else {
             caps.alpha_modes[0]
@@ -225,13 +248,19 @@ impl WgpuRenderer {
             println!("!! Check that PEN_DX12 is not set to 'hwnd', or try PEN_BACKEND=vulkan.");
             println!("!! Known wgpu issue: the alpha mode must be PreMultiplied at the FIRST configure (it is here).");
         }
-        let present_mode = match std::env::var("PEN_PRESENT").unwrap_or_default().to_lowercase().as_str() {
+        let present_mode = match std::env::var("PEN_PRESENT")
+            .unwrap_or_default()
+            .to_lowercase()
+            .as_str()
+        {
             "vsync" => wgpu::PresentMode::AutoVsync,
             "fifo" => wgpu::PresentMode::Fifo,
             "mailbox" => wgpu::PresentMode::Mailbox,
             "immediate" => wgpu::PresentMode::Immediate,
             // default: Mailbox (no vsync blocking, no tearing) when offered, else whatever has no vsync wait
-            _ if caps.present_modes.contains(&wgpu::PresentMode::Mailbox) => wgpu::PresentMode::Mailbox,
+            _ if caps.present_modes.contains(&wgpu::PresentMode::Mailbox) => {
+                wgpu::PresentMode::Mailbox
+            }
             _ => wgpu::PresentMode::AutoNoVsync,
         };
 
@@ -282,7 +311,10 @@ impl WgpuRenderer {
         let stamp_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("stamp bg"),
             layout: &stamp_bgl,
-            entries: &[wgpu::BindGroupEntry { binding: 0, resource: params.as_entire_binding() }],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: params.as_entire_binding(),
+            }],
         });
         let stamp_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("stamp layout"),
@@ -314,7 +346,10 @@ impl WgpuRenderer {
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),
-                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    ..Default::default()
+                },
                 depth_stencil: None,
                 multisample: wgpu::MultisampleState::default(),
                 multiview_mask: None,
@@ -372,7 +407,11 @@ impl WgpuRenderer {
                 module: &present_mod,
                 entry_point: Some("fs_full"),
                 compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState { format, blend: None, write_mask: wgpu::ColorWrites::ALL })],
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
             }),
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
@@ -381,7 +420,8 @@ impl WgpuRenderer {
             cache: None,
         });
 
-        let (ink_view, present_bg) = Self::make_ink(&device, &present_bgl, &params, config.width, config.height);
+        let (ink_view, present_bg) =
+            Self::make_ink(&device, &present_bgl, &params, config.width, config.height);
         let g = WgpuRenderer {
             surface,
             device,
@@ -414,7 +454,11 @@ impl WgpuRenderer {
     ) -> (wgpu::TextureView, wgpu::BindGroup) {
         let tex = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("ink"),
-            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -427,8 +471,14 @@ impl WgpuRenderer {
             label: Some("present bg"),
             layout: bgl,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: params.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: params.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
             ],
         });
         (view, bg)
@@ -437,7 +487,15 @@ impl WgpuRenderer {
     /// Layout matches `Params` in the shaders: screen (2), opaque, border width, border colour and paper colour (both premultiplied).
     fn write_params(&self) {
         let (bw, b) = match self.border {
-            Some(b) => (b.width_px, [b.rgb[0] * b.alpha, b.rgb[1] * b.alpha, b.rgb[2] * b.alpha, b.alpha]),
+            Some(b) => (
+                b.width_px,
+                [
+                    b.rgb[0] * b.alpha,
+                    b.rgb[1] * b.alpha,
+                    b.rgb[2] * b.alpha,
+                    b.alpha,
+                ],
+            ),
             None => (0.0, [0.0; 4]),
         };
         let pp = match self.paper {
@@ -458,7 +516,8 @@ impl WgpuRenderer {
             pp[2],
             pp[3],
         ];
-        self.queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
+        self.queue
+            .write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
     }
 
     fn resize_impl(&mut self, w: u32, h: u32) {
@@ -485,7 +544,10 @@ impl WgpuRenderer {
                     view: &self.ink_view,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -499,7 +561,8 @@ impl WgpuRenderer {
     fn stamp_impl(&self, dabs: &[Dab], pipe: &wgpu::RenderPipeline) {
         for chunk in dabs.chunks(MAX_DABS) {
             // one submit per chunk: write_buffer to the same offset twice before a submit would overwrite
-            self.queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(chunk));
+            self.queue
+                .write_buffer(&self.instances, 0, bytemuck::cast_slice(chunk));
             let mut enc = self.device.create_command_encoder(&Default::default());
             {
                 let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -508,7 +571,10 @@ impl WgpuRenderer {
                         view: &self.ink_view,
                         depth_slice: None,
                         resolve_target: None,
-                        ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
                     })],
                     depth_stencil_attachment: None,
                     timestamp_writes: None,
@@ -537,7 +603,9 @@ impl WgpuRenderer {
             // Timeout, Occluded, Validation: skip this frame
             _ => return false,
         };
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         let mut enc = self.device.create_command_encoder(&Default::default());
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -546,7 +614,10 @@ impl WgpuRenderer {
                     view: &view,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,

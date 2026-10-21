@@ -15,7 +15,9 @@ impl Cloud {
     /// `None` when there is nothing to match (no points at all).
     pub fn new(strokes: &[Stroke]) -> Option<Cloud> {
         let raw = resample(strokes, CLOUD_POINTS)?;
-        Some(Cloud { pts: normalise(raw) })
+        Some(Cloud {
+            pts: normalise(raw),
+        })
     }
 
     pub fn points(&self) -> &[(f32, f32)] {
@@ -50,7 +52,10 @@ fn resample(strokes: &[Stroke], n: usize) -> Option<Vec<(f32, f32)>> {
     }
     if total <= f32::EPSILON {
         // dots only: repeat the dots round-robin so the cloud still has n points
-        let all: Vec<(f32, f32)> = strokes.iter().flat_map(|s| s.points.iter().map(|p| (p.x, p.y))).collect();
+        let all: Vec<(f32, f32)> = strokes
+            .iter()
+            .flat_map(|s| s.points.iter().map(|p| (p.x, p.y)))
+            .collect();
         return Some((0..n).map(|i| all[i * all.len() / n]).collect());
     }
     let step = total / (n as f32 - 1.0);
@@ -80,7 +85,11 @@ fn resample(strokes: &[Stroke], n: usize) -> Option<Vec<(f32, f32)>> {
     }
     while out.len() < n {
         // rounding left us one short: the last drawn point closes the cloud
-        let last = strokes.last().and_then(|s| s.points.last()).map(|p| (p.x, p.y)).unwrap_or(out[0]);
+        let last = strokes
+            .last()
+            .and_then(|s| s.points.last())
+            .map(|p| (p.x, p.y))
+            .unwrap_or(out[0]);
         out.push(last);
     }
     out.truncate(n);
@@ -158,7 +167,9 @@ mod tests {
     use crate::Point;
 
     fn st(pts: &[(f32, f32)]) -> Stroke {
-        Stroke { points: pts.iter().map(|&(x, y)| Point { x, y }).collect() }
+        Stroke {
+            points: pts.iter().map(|&(x, y)| Point { x, y }).collect(),
+        }
     }
 
     #[test]
@@ -171,9 +182,13 @@ mod tests {
     fn a_cloud_has_the_fixed_size_and_is_centred_in_a_unit_box() {
         let c = Cloud::new(&[st(&[(10.0, 10.0), (110.0, 10.0), (110.0, 60.0)])]).unwrap();
         assert_eq!(c.points().len(), CLOUD_POINTS);
-        let (sx, sy) = c.points().iter().fold((0.0, 0.0), |a, p| (a.0 + p.0, a.1 + p.1));
+        let (sx, sy) = c
+            .points()
+            .iter()
+            .fold((0.0, 0.0), |a, p| (a.0 + p.0, a.1 + p.1));
         assert!((sx / 32.0).abs() < 1e-4 && (sy / 32.0).abs() < 1e-4);
-        let w = c.points().iter().map(|p| p.0).fold(f32::MIN, f32::max) - c.points().iter().map(|p| p.0).fold(f32::MAX, f32::min);
+        let w = c.points().iter().map(|p| p.0).fold(f32::MIN, f32::max)
+            - c.points().iter().map(|p| p.0).fold(f32::MAX, f32::min);
         assert!(w <= 1.0001 && w > 0.9);
     }
 
@@ -201,9 +216,21 @@ mod tests {
 
     #[test]
     fn stroke_count_and_order_do_not_matter() {
-        let two = Cloud::new(&[st(&[(0.0, 5.0), (10.0, 5.0)]), st(&[(5.0, 0.0), (5.0, 10.0)])]).unwrap();
-        let swapped = Cloud::new(&[st(&[(5.0, 0.0), (5.0, 10.0)]), st(&[(0.0, 5.0), (10.0, 5.0)])]).unwrap();
-        let reversed = Cloud::new(&[st(&[(10.0, 5.0), (0.0, 5.0)]), st(&[(5.0, 10.0), (5.0, 0.0)])]).unwrap();
+        let two = Cloud::new(&[
+            st(&[(0.0, 5.0), (10.0, 5.0)]),
+            st(&[(5.0, 0.0), (5.0, 10.0)]),
+        ])
+        .unwrap();
+        let swapped = Cloud::new(&[
+            st(&[(5.0, 0.0), (5.0, 10.0)]),
+            st(&[(0.0, 5.0), (10.0, 5.0)]),
+        ])
+        .unwrap();
+        let reversed = Cloud::new(&[
+            st(&[(10.0, 5.0), (0.0, 5.0)]),
+            st(&[(5.0, 10.0), (5.0, 0.0)]),
+        ])
+        .unwrap();
         assert!(two.distance(&swapped) < 0.05);
         assert!(two.distance(&reversed) < 0.05);
     }

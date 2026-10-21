@@ -15,14 +15,18 @@ pub fn strokes_from_samples(samples: &[Sample]) -> Vec<Stroke> {
             Phase::Hover => {}
             Phase::Down => {
                 if !cur.is_empty() {
-                    out.push(Stroke { points: std::mem::take(&mut cur) });
+                    out.push(Stroke {
+                        points: std::mem::take(&mut cur),
+                    });
                 }
                 cur.push(Point { x: s.x, y: s.y });
             }
             Phase::Move => cur.push(Point { x: s.x, y: s.y }),
             Phase::Up => {
                 cur.push(Point { x: s.x, y: s.y });
-                out.push(Stroke { points: std::mem::take(&mut cur) });
+                out.push(Stroke {
+                    points: std::mem::take(&mut cur),
+                });
             }
         }
     }
@@ -37,7 +41,19 @@ mod tests {
     use super::*;
 
     fn s(phase: Phase, x: f32, y: f32) -> Sample {
-        Sample { pen_id: 0, phase, x, y, tablet: None, pressure: None, tilt: None, buttons: 0, eraser: false, t_us: 0, t_hardware: false }
+        Sample {
+            pen_id: 0,
+            phase,
+            x,
+            y,
+            tablet: None,
+            pressure: None,
+            tilt: None,
+            buttons: 0,
+            eraser: false,
+            t_us: 0,
+            t_hardware: false,
+        }
     }
 
     #[test]
@@ -54,7 +70,10 @@ mod tests {
         let st = strokes_from_samples(&v);
         assert_eq!(st.len(), 2);
         assert_eq!(st[0].points.len(), 3);
-        assert_eq!(st[1].points, vec![Point { x: 5.0, y: 5.0 }, Point { x: 5.0, y: 6.0 }]);
+        assert_eq!(
+            st[1].points,
+            vec![Point { x: 5.0, y: 5.0 }, Point { x: 5.0, y: 6.0 }]
+        );
     }
 
     #[test]
@@ -69,7 +88,12 @@ mod tests {
 
     #[test]
     fn down_without_up_before_the_next_down_closes_the_stroke() {
-        let v = [s(Phase::Down, 0.0, 0.0), s(Phase::Move, 1.0, 0.0), s(Phase::Down, 5.0, 5.0), s(Phase::Up, 6.0, 5.0)];
+        let v = [
+            s(Phase::Down, 0.0, 0.0),
+            s(Phase::Move, 1.0, 0.0),
+            s(Phase::Down, 5.0, 5.0),
+            s(Phase::Up, 6.0, 5.0),
+        ];
         assert_eq!(strokes_from_samples(&v).len(), 2);
     }
 }

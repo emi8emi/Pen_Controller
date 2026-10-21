@@ -588,20 +588,20 @@ impl ApplicationHandler<UserEvent> for App {
         println!("Hidden. Bring the pen near the tablet to show it. Ctrl+Alt+D pins it, Ctrl+Alt+K hands-off, Ctrl+Alt+Q quits.");
     }
 
-        #[cfg(target_os = "linux")]
-        fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-            match self.dismiss_at {
-                Some(t) if Instant::now() >= t => {
-                    self.dismiss_at = None;
-                    el.set_control_flow(ControlFlow::Wait);
-                    let a = lifecycle(|l| l.mouse_moved()); // same rule as the Windows mouse dismiss
-                    self.run(a);
-                }
-                Some(t) => el.set_control_flow(ControlFlow::WaitUntil(t)),
-                None => el.set_control_flow(ControlFlow::Wait),
+    #[cfg(target_os = "linux")]
+    fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        match self.dismiss_at {
+            Some(t) if Instant::now() >= t => {
+                self.dismiss_at = None;
+                el.set_control_flow(ControlFlow::Wait);
+                let a = lifecycle(|l| l.mouse_moved()); // same rule as the Windows mouse dismiss
+                self.run(a);
             }
+            Some(t) => el.set_control_flow(ControlFlow::WaitUntil(t)),
+            None => el.set_control_flow(ControlFlow::Wait),
         }
-        
+    }
+
     fn user_event(&mut self, el: &ActiveEventLoop, ev: UserEvent) {
         match ev {
             UserEvent::Samples => {

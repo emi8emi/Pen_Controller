@@ -75,8 +75,14 @@ impl Library {
         if label.is_empty() {
             return false;
         }
-        let Some(cloud) = Cloud::new(&strokes) else { return false };
-        self.entries.push(Entry { label: label.to_string(), strokes, cloud });
+        let Some(cloud) = Cloud::new(&strokes) else {
+            return false;
+        };
+        self.entries.push(Entry {
+            label: label.to_string(),
+            strokes,
+            cloud,
+        });
         true
     }
 
@@ -103,7 +109,9 @@ impl Library {
     /// The labels whose best example is within the matching limit, closest first. Empty when the library is
     /// empty, the drawing has no points, or nothing is close.
     pub fn recognize(&self, strokes: &[Stroke]) -> Vec<Match> {
-        let Some(cloud) = Cloud::new(strokes) else { return Vec::new() };
+        let Some(cloud) = Cloud::new(strokes) else {
+            return Vec::new();
+        };
         let mut best: Vec<Match> = Vec::new();
         for e in &self.entries {
             let d = cloud.distance(&e.cloud);
@@ -116,7 +124,11 @@ impl Library {
                     m.score = score(d);
                 }
                 Some(_) => {}
-                None => best.push(Match { label: e.label.clone(), score: score(d), distance: d }),
+                None => best.push(Match {
+                    label: e.label.clone(),
+                    score: score(d),
+                    distance: d,
+                }),
             }
         }
         best.sort_by(|a, b| a.distance.total_cmp(&b.distance));
@@ -139,7 +151,11 @@ impl Library {
             out.push('\n');
             for s in &e.strokes {
                 out.push_str("S\t");
-                let pts: Vec<String> = s.points.iter().map(|p| format!("{},{}", p.x, p.y)).collect();
+                let pts: Vec<String> = s
+                    .points
+                    .iter()
+                    .map(|p| format!("{},{}", p.x, p.y))
+                    .collect();
                 out.push_str(&pts.join(" "));
                 out.push('\n');
             }
@@ -151,7 +167,12 @@ impl Library {
         let mut lines = text.lines().enumerate();
         match lines.next() {
             Some((_, "pen-recog 1")) => {}
-            _ => return Err(ParseError { line: 1, what: "not a pen-recog 1 file" }),
+            _ => {
+                return Err(ParseError {
+                    line: 1,
+                    what: "not a pen-recog 1 file",
+                })
+            }
         }
         let mut lib = Library::new();
         let mut cur: Option<(String, Vec<Stroke>)> = None;
@@ -169,20 +190,40 @@ impl Library {
                 flush(&mut lib, &mut cur);
                 cur = Some((unescape(label), Vec::new()));
             } else if let Some(pts) = line.strip_prefix("S\t") {
-                let Some((_, strokes)) = cur.as_mut() else { return Err(ParseError { line: n, what: "a stroke before any label" }) };
+                let Some((_, strokes)) = cur.as_mut() else {
+                    return Err(ParseError {
+                        line: n,
+                        what: "a stroke before any label",
+                    });
+                };
                 let mut points = Vec::new();
                 for pair in pts.split_whitespace() {
-                    let (x, y) = pair.split_once(',').ok_or(ParseError { line: n, what: "a point is not x,y" })?;
-                    let x: f32 = x.parse().map_err(|_| ParseError { line: n, what: "bad number" })?;
-                    let y: f32 = y.parse().map_err(|_| ParseError { line: n, what: "bad number" })?;
+                    let (x, y) = pair.split_once(',').ok_or(ParseError {
+                        line: n,
+                        what: "a point is not x,y",
+                    })?;
+                    let x: f32 = x.parse().map_err(|_| ParseError {
+                        line: n,
+                        what: "bad number",
+                    })?;
+                    let y: f32 = y.parse().map_err(|_| ParseError {
+                        line: n,
+                        what: "bad number",
+                    })?;
                     if !x.is_finite() || !y.is_finite() {
-                        return Err(ParseError { line: n, what: "bad number" });
+                        return Err(ParseError {
+                            line: n,
+                            what: "bad number",
+                        });
                     }
                     points.push(Point { x, y });
                 }
                 strokes.push(Stroke { points });
             } else {
-                return Err(ParseError { line: n, what: "unknown line" });
+                return Err(ParseError {
+                    line: n,
+                    what: "unknown line",
+                });
             }
         }
         flush(&mut lib, &mut cur);
@@ -195,7 +236,10 @@ fn score(d: f32) -> f32 {
 }
 
 fn escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('\n', "\\n").replace('\t', "\\t").replace('\r', "\\r")
+    s.replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\t', "\\t")
+        .replace('\r', "\\r")
 }
 
 fn unescape(s: &str) -> String {
@@ -226,7 +270,9 @@ mod tests {
     use super::*;
 
     fn st(pts: &[(f32, f32)]) -> Stroke {
-        Stroke { points: pts.iter().map(|&(x, y)| Point { x, y }).collect() }
+        Stroke {
+            points: pts.iter().map(|&(x, y)| Point { x, y }).collect(),
+        }
     }
 
     /// A circle-ish loop, a zigzag and a check mark: three things a person might use as symbols.
@@ -241,10 +287,21 @@ mod tests {
         st(&pts)
     }
     fn check(x: f32, y: f32, s: f32, jitter: f32) -> Stroke {
-        st(&[(x, y + 0.5 * s + jitter), (x + 0.3 * s, y + s), (x + s, y + jitter)])
+        st(&[
+            (x, y + 0.5 * s + jitter),
+            (x + 0.3 * s, y + s),
+            (x + s, y + jitter),
+        ])
     }
     fn zigzag(x: f32, y: f32, s: f32) -> Stroke {
-        st(&[(x, y), (x + s, y + 0.2 * s), (x, y + 0.4 * s), (x + s, y + 0.6 * s), (x, y + 0.8 * s), (x + s, y + s)])
+        st(&[
+            (x, y),
+            (x + s, y + 0.2 * s),
+            (x, y + 0.4 * s),
+            (x + s, y + 0.6 * s),
+            (x, y + 0.8 * s),
+            (x + s, y + s),
+        ])
     }
 
     fn lib() -> Library {
@@ -272,7 +329,9 @@ mod tests {
         let l = lib();
         // a long horizontal line is none of the three
         assert!(l.recognize(&[st(&[(0.0, 0.0), (200.0, 0.0)])]).is_empty());
-        assert!(Library::new().recognize(&[check(0.0, 0.0, 10.0, 0.0)]).is_empty());
+        assert!(Library::new()
+            .recognize(&[check(0.0, 0.0, 10.0, 0.0)])
+            .is_empty());
         assert!(l.recognize(&[]).is_empty());
     }
 
@@ -289,9 +348,18 @@ mod tests {
     #[test]
     fn a_multi_stroke_symbol_matches_however_it_was_drawn() {
         let mut l = Library::new();
-        l.add("plus", vec![st(&[(0.0, 5.0), (10.0, 5.0)]), st(&[(5.0, 0.0), (5.0, 10.0)])]);
+        l.add(
+            "plus",
+            vec![
+                st(&[(0.0, 5.0), (10.0, 5.0)]),
+                st(&[(5.0, 0.0), (5.0, 10.0)]),
+            ],
+        );
         l.add("minus", vec![st(&[(0.0, 5.0), (10.0, 5.0)])]);
-        let m = l.recognize(&[st(&[(5.0, 10.0), (5.0, 0.0)]), st(&[(10.0, 5.0), (0.0, 5.0)])]);
+        let m = l.recognize(&[
+            st(&[(5.0, 10.0), (5.0, 0.0)]),
+            st(&[(10.0, 5.0), (0.0, 5.0)]),
+        ]);
         assert_eq!(m[0].label, "plus");
     }
 
@@ -328,7 +396,13 @@ mod tests {
     #[test]
     fn text_round_trip_keeps_labels_and_still_matches() {
         let mut l = lib();
-        l.add("I need\thelp\nplease \\ now", vec![st(&[(0.0, 0.0), (3.5, 4.25)]), st(&[(1.0, 1.0), (2.0, 9.0)])]);
+        l.add(
+            "I need\thelp\nplease \\ now",
+            vec![
+                st(&[(0.0, 0.0), (3.5, 4.25)]),
+                st(&[(1.0, 1.0), (2.0, 9.0)]),
+            ],
+        );
         let text = l.to_text();
         let back = Library::from_text(&text).unwrap();
         assert_eq!(back.len(), l.len());
@@ -341,12 +415,19 @@ mod tests {
     fn bad_files_are_errors_not_panics() {
         assert!(Library::from_text("").is_err());
         assert!(Library::from_text("something else\n").is_err());
-        assert_eq!(Library::from_text("pen-recog 1\nS\t1,2\n").unwrap_err().what, "a stroke before any label");
+        assert_eq!(
+            Library::from_text("pen-recog 1\nS\t1,2\n")
+                .unwrap_err()
+                .what,
+            "a stroke before any label"
+        );
         assert!(Library::from_text("pen-recog 1\nT\ta\nS\t1;2\n").is_err());
         assert!(Library::from_text("pen-recog 1\nT\ta\nS\tx,2\n").is_err());
         assert!(Library::from_text("pen-recog 1\nT\ta\nS\tNaN,2\n").is_err());
         assert!(Library::from_text("pen-recog 1\nwhat\n").is_err());
         // a label with no strokes is simply not saved
-        assert!(Library::from_text("pen-recog 1\nT\ta\n").unwrap().is_empty());
+        assert!(Library::from_text("pen-recog 1\nT\ta\n")
+            .unwrap()
+            .is_empty());
     }
 }
