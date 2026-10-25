@@ -23,18 +23,23 @@
 //! The window never takes keyboard focus yet (`Lifecycle::can_take_focus` is ready for when it should).
 //! The mouse also draws (pressure 0.5): pin the overlay first, or moving the mouse hides it.
 //!
+//! `--config` also opens a config window (a second window in this process) with the tray's switches as big
+//! buttons, for platforms without a tray. Closing it leaves the overlay running.
+//!
 //! Env:  PEN_REDIRECT = set it to keep the window's redirection bitmap (to compare)
 //!       PEN_CLEAR_ON_DISMISS = set it to start with "clear drawing when hidden" on (not saved otherwise)
 //!       Read by pen-ink's renderer: PEN_BACKEND = dx12 (default on Windows) | vulkan,
 //!       PEN_DX12 = visual (default, DirectComposition, needed for transparency) | hwnd,
 //!       PEN_PRESENT = (default: mailbox if available) | vsync | fifo | mailbox | immediate
 
+mod config_ui;
 #[cfg(windows)]
 mod input_win;
 
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
+use config_ui::{ConfigWindow, View};
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use pen_core::{Action, Lifecycle};
@@ -297,6 +302,11 @@ struct App {
     mouse_down: bool,
     /// Canvas behaviour. A client will be able to set this through the protocol; for now the tray does.
     options: CanvasOptions,
+    /// `--config` was given: open the config window at start.
+    want_config: bool,
+    config: Option<ConfigWindow>,
+    /// The config window has keyboard/pointer focus: the pen is for its buttons, not for summoning the overlay.
+    config_focused: bool,
     #[cfg_attr(not(windows), allow(dead_code))]
     tray: Option<Tray>,
     hotkeys: GlobalHotKeyManager,
@@ -392,6 +402,22 @@ impl App {
             Some(Action::Hide) => self.hide(),
             None => {}
         }
+        self.refresh_config();
+    }
+
+    fn config_view(&self) -> View {
+        lifecycle(|l| View {
+            visible: l.is_visible(),
+            auto_show: l.auto_show(),
+            hands_off: l.hands_off(),
+            clear_on_dismiss: self.options.clear_on_dismiss,
+        })
+    }
+
+    fn refresh_config(&self) {
+        if let Some(c) = self.config.as_ref() {
+            c.request_redraw();
+        }
     }
 
     /// Hands-off: release every hotkey except the hands-off one (or take them back).
@@ -416,6 +442,7 @@ impl App {
     }
 
     fn sync_tray(&self) {
+        self.refresh_config();
         if let Some(tray) = self.tray.as_ref() {
             let (auto_show, hands_off) = lifecycle(|l| (l.auto_show(), l.hands_off()));
             tray.sync(auto_show, hands_off, self.options.clear_on_dismiss);
@@ -485,8 +512,10 @@ impl App {
             self.pen_in_range = in_range;
             if in_range {
                 self.dismiss_at = None; // came back in time: cancel the pending dismiss
-                let a = lifecycle(|l| l.pen_summon(|| None));
-                self.run(a);
+                if !self.config_focused {
+                    let a = lifecycle(|l| l.pen_summon(|| None));
+                    self.run(a);
+                }
             } else {
                 self.dismiss_at = Some(Instant::now() + dismiss_after());
             }
@@ -585,6 +614,9 @@ impl ApplicationHandler<UserEvent> for App {
                 self.set_passthrough(true); // start "hidden"
             }
         }
+        if self.want_config && self.config.is_none() {
+            self.config = Some(ConfigWindow::new(el));
+        }
         println!("Hidden. Bring the pen near the tablet to show it. Ctrl+Alt+D pins it, Ctrl+Alt+K hands-off, Ctrl+Alt+Q quits.");
     }
 
@@ -617,7 +649,11 @@ impl ApplicationHandler<UserEvent> for App {
         }
     }
 
-    fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, ev: WindowEvent) {
+    fn window_event(&mut self, el: &ActiveEventLoop, id: WindowId, ev: WindowEvent) {
+        if self.config.as_ref().is_some_and(|c| c.id() == id) {
+            self.config_event(el, ev);
+            return;
+        }
         match ev {
             WindowEvent::CloseRequested => el.exit(),
             WindowEvent::Resized(size) => {
@@ -668,6 +704,38 @@ impl ApplicationHandler<UserEvent> for App {
                 self.handle_batch(&[item]);
             }
             _ => {}
+        }
+    }
+}
+
+impl App {
+    fn config_event(&mut self, el: &ActiveEventLoop, ev: WindowEvent) {
+        match ev {
+            // closing the config window must not stop the overlay (it is gone for good: Wayland cannot hide a window)
+            WindowEvent::CloseRequested => {
+                self.config = None;
+                self.config_focused = false;
+            }
+            WindowEvent::RedrawRequested => {
+                let view = self.config_view();
+                let cmds = match self.config.as_mut() {
+                    Some(c) => c.frame(view),
+                    None => return,
+                };
+                for cmd in cmds {
+                    self.command(el, cmd);
+                }
+            }
+            other => {
+                if let WindowEvent::Focused(f) = other {
+                    self.config_focused = f;
+                }
+                if let Some(c) = self.config.as_mut() {
+                    if c.on_event(&other) {
+                        c.request_redraw();
+                    }
+                }
+            }
         }
     }
 }
@@ -768,6 +836,9 @@ fn main() {
         options: CanvasOptions {
             clear_on_dismiss: std::env::var("PEN_CLEAR_ON_DISMISS").is_ok(),
         },
+        want_config: std::env::args().any(|a| a == "--config"),
+        config: None,
+        config_focused: false,
         tray: None,
         hotkeys,
         keys,

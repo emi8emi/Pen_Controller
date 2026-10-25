@@ -12,4 +12,12 @@ pen-core = { path = "../pen-core" }
 pen-ink = { path = "../pen-ink" }
 winit = "0.30"
 global-hotkey = "0.8"
+# Config window. egui 0.37 needs wgpu 30 and winit 0.30, the same as pen-ink and this crate.
+egui = "0.37"
+egui-wgpu = { version = "0.37", features = ["winit"] }
+egui-winit = { version = "0.37", default-features = false, features = ["wayland", "x11"] }
+pollster = "0.4"
+
+# The tray exists on Windows only (tray-icon pulls in GTK on Linux, which nothing here uses).
+[target.'cfg(windows)'.dependencies]
 tray-icon = "0.26"

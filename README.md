@@ -90,6 +90,18 @@ for_window [title="pen controller"] floating enable, border none, sticky enable,
 
 Use your output's pixel size for `W H` (`swaymsg -t get_outputs`).
 
+**3. Config window (optional).** There is no tray or global hotkey on Wayland, so run with `--config`
+(`cargo run -p controller -- --config`) to get a second window with the tray's switches as big buttons:
+show/hide overlay, show when the pen is used, clear when hidden, hands-off, quit. Give it its own rule
+(its title is `pen-ctl config`, so the overlay rule above does not match it):
+
+```
+for_window [app_id="pen-controller-config"] floating enable, resize set 460 520
+```
+
+Closing it leaves the overlay running; it can only be reopened by restarting with `--config`. While it has
+focus the pen does not summon the overlay. `tray-icon` is built on Windows only.
+
 **What works:** a transparent canvas with pressure-sensitive ink, positioned by sway's pointer events and
 driven by the pen device (pressure, tip contact, barrel button in `Sample::buttons`).
 
