@@ -13,7 +13,7 @@ pen-ink = { path = "../pen-ink" }
 winit = "0.30"
 global-hotkey = "0.8"
 # Config window. egui 0.37 needs wgpu 30 and winit 0.30, the same as pen-ink and this crate.
-egui = "0.37"
+egui = { version = "0.37", features = ["default_fonts"] }
 egui-wgpu = { version = "0.37", features = ["winit"] }
 egui-winit = { version = "0.37", default-features = false, features = ["wayland", "x11"] }
 pollster = "0.4"
