@@ -26,13 +26,16 @@
 //! `--config` also opens a config window (a second window in this process) with the tray's switches as big
 //! buttons, for platforms without a tray. Closing it leaves the overlay running.
 //!
+//! "Clear drawing when hidden" is saved in the config file (see `settings.rs`); the other switches are not.
+//!
 //! Env:  PEN_REDIRECT = set it to keep the window's redirection bitmap (to compare)
-//!       PEN_CLEAR_ON_DISMISS = set it to start with "clear drawing when hidden" on (not saved otherwise)
+//!       PEN_CLEAR_ON_DISMISS = set it to start with "clear drawing when hidden" on, whatever the config file says
 //!       Read by pen-ink's renderer: PEN_BACKEND = dx12 (default on Windows) | vulkan,
 //!       PEN_DX12 = visual (default, DirectComposition, needed for transparency) | hwnd,
 //!       PEN_PRESENT = (default: mailbox if available) | vsync | fifo | mailbox | immediate
 
 mod config_ui;
+mod settings;
 #[cfg(windows)]
 mod input_win;
 
@@ -481,6 +484,7 @@ impl App {
             }
             Command::ToggleClearOnDismiss => {
                 self.options.clear_on_dismiss = !self.options.clear_on_dismiss;
+                settings::save(self.options);
                 println!(
                     "clear drawing when hidden: {}",
                     if self.options.clear_on_dismiss {
@@ -833,9 +837,7 @@ fn main() {
         stats: Stats::default(),
         cursor: (0.0, 0.0),
         mouse_down: false,
-        options: CanvasOptions {
-            clear_on_dismiss: std::env::var("PEN_CLEAR_ON_DISMISS").is_ok(),
-        },
+        options: settings::load(),
         want_config: std::env::args().any(|a| a == "--config"),
         config: None,
         config_focused: false,

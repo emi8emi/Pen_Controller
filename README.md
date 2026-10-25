@@ -43,8 +43,9 @@ start at on / off and are never saved.
 blue-grey while hands-off is on.
 
 **Clear drawing when hidden** (`CanvasOptions::clear_on_dismiss` in the protocol): the ink is wiped whenever
-the overlay hides, for any reason. Off by default and not saved between launches yet; set
-`PEN_CLEAR_ON_DISMISS=1` to start with it on. A client will be able to set it over the protocol.
+the overlay hides, for any reason. Off by default. It is saved when you change it, in
+`~/.config/pen-controller/config` (Linux, or under `$XDG_CONFIG_HOME`) or `%APPDATA%\pen-controller\config`
+(Windows): one line, `clear_on_dismiss = true`. `PEN_CLEAR_ON_DISMISS=1` turns it on for that run whatever the file says. A client will be able to set it over the protocol.
 
 Environment variables: `PEN_REDIRECT` (set it to keep the window's redirection bitmap),
 `PEN_CLEAR_ON_DISMISS`. Read by the renderer in `pen-ink`: `PEN_BACKEND` (`dx12` | `vulkan`),
@@ -116,8 +117,8 @@ driven by the pen device (pressure, tip contact, barrel button in `Sample::butto
   client see global mouse movement, so the Windows "a real mouse move dismisses" rule cannot be
   reproduced. A mouse nudge while the pen still hovers does not dismiss.
 - A Wayland client cannot hide its own window, so "hidden" means click-through (`set_cursor_hittest(false)`)
-  with no border. Ink stays on screen when hidden unless clear-on-dismiss is on, so use
-  `PEN_CLEAR_ON_DISMISS=1` for now.
+  with no border. Ink stays on screen when hidden unless clear-on-dismiss is on, so turn on
+  "Clear drawing when hidden" (config window) if you do not want that.
 - The window does not follow the active workspace or monitor, and it is not above other windows by itself.
   `sticky enable` in the sway rule keeps it on every workspace of its output; it is not a real fix.
 - No tilt, and no hover samples carrying their own positions.
@@ -163,6 +164,6 @@ the message list are in `pen-proto/src/lib.rs`. No transport is wired up yet.
 - Windows build not re-checked after the Linux changes (the tray is stubbed out on non-Windows; the
   Windows path is meant to be unchanged).
 - Taking keyboard focus for pinned overlays (`Lifecycle::can_take_focus` already decides it).
-- A config file, so settings such as clear-on-dismiss persist.
+- More settings in the config file (only clear-on-dismiss is saved; auto-show and hands-off are deliberately not).
 - The airbrush and rectangle brushes from the Tauri overlay.
 - Sub-pixel pen positions (`ptHimetricLocationRaw`) and tablet-normalised coordinates.
